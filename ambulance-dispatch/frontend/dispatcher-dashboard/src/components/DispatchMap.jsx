@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { ambulanceMarkerHtml, incidentMarkerHtml, hospitalMarkerHtml, routeBadgeText, ensureMarkerStyles, ambulanceMarkerKey, incidentMarkerKey } from '../map/markers';
 import { Box, Typography, IconButton, Button } from '@mui/material';
 import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
 import CloseIcon from '@mui/icons-material/Close';
@@ -109,177 +110,31 @@ const ROUTE_THEMES = {
 };
 
 /* ── DOM Element Creators for MapLibre Markers ── */
-function createAmbulanceDomElement(amb) {
+function markerElement(className, html) {
+  ensureMarkerStyles();
   const wrapper = document.createElement('div');
-  wrapper.className = `maplibre-ambulance-wrapper amb-node-${amb.id}`;
-  wrapper.style.cursor = 'pointer';
-
-  const status = amb.status || 'AVAILABLE';
-  const moving = ['EN_ROUTE_TO_SCENE', 'EN_ROUTE', 'TRANSPORTING_TO_HOSPITAL', 'TRANSPORTING', 'RETURNING_TO_BASE'].includes(status);
-  const isStale = amb.last_ping && (Date.now() - new Date(amb.last_ping).getTime() > 120000);
-
-  const statusMap = {
-    AVAILABLE:                { color: '#10B981', label: '• STANDBY' },
-    ASSIGNED:                 { color: '#EAB308', label: '• ASSIGNED' },
-    EN_ROUTE_TO_SCENE:        { color: '#F97316', label: '• EN ROUTE' },
-    EN_ROUTE:                 { color: '#F97316', label: '• EN ROUTE' },
-    ON_SCENE:                 { color: '#EF4444', label: '• ON SCENE' },
-    TRANSPORTING_TO_HOSPITAL: { color: '#2563EB', label: '• TRANSPORTING' },
-    TRANSPORTING:             { color: '#2563EB', label: '• TRANSPORTING' },
-    ARRIVED_AT_HOSPITAL:      { color: '#9333EA', label: '• AT HOSPITAL' },
-    RETURNING_TO_BASE:        { color: '#64748B', label: '• RETURNING' },
-    MAINTENANCE:              { color: '#94A3B8', label: '• MAINTENANCE' },
-    OFFLINE:                  { color: '#94A3B8', label: '• OFFLINE' },
-  };
-
-  const currentConf = statusMap[status] || { color: '#10B981', label: `• ${status}` };
-  const color = isStale ? '#94A3B8' : currentConf.color;
-  const statusLabel = isStale ? '⚠️ OFFLINE' : currentConf.label;
-
-  const callsign = amb.call_sign || amb.vehicle_number || amb.id || 'AMB';
-
-  const inner = document.createElement('div');
-  inner.style.display = 'flex';
-  inner.style.flexDirection = 'column';
-  inner.style.alignItems = 'center';
-  inner.style.pointerEvents = 'auto';
-
-  inner.innerHTML = `
-    <!-- Dynamic Live Status & Callsign Badge -->
-    <div class="amb-live-badge" style="
-      background:#0F172A;color:#FFFFFF;padding:2.5px 8px;border-radius:12px;
-      font-size:10px;font-weight:800;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,0.35);
-      margin-bottom:-4px;z-index:10;border:1.5px solid #FFFFFF;letter-spacing:0.3px;font-family:'Inter',sans-serif;
-    ">
-      ${callsign} ${statusLabel}
-    </div>
-
-    <!-- Google Pin Circle with Drop-Shadow & Rotatable Vehicle Icon -->
-    <div style="
-      position:relative;width:38px;height:38px;border-radius:50%;
-      background:${color};border:3px solid #FFFFFF;
-      box-shadow:0 4px 14px rgba(0,0,0,0.38);
-      display:flex;align-items:center;justify-content:center;
-      transition:all 0.3s ease;
-    ">
-      ${moving ? `<div style="position:absolute;inset:-6px;border-radius:50%;border:2px solid ${color};opacity:0.6;animation:amb-pulse 1.2s infinite"></div>` : ''}
-      <div class="vehicle-icon-rotator" style="width:20px;height:20px;display:flex;align-items:center;justify-content:center;transition:transform 0.15s linear;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <rect x="3" y="6" width="14" height="11" rx="2" fill="white"/>
-          <path d="M17 9l4 2v6h-4V9z" fill="white"/>
-          <circle cx="7.5" cy="17.5" r="2.5" fill="#0F172A"/>
-          <circle cx="17.5" cy="17.5" r="2.5" fill="#0F172A"/>
-          <path d="M10 8.5v6M7 11.5h6" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </div>
-    </div>
-
-    <!-- Pointer -->
-    <div style="
-      width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;
-      border-top:8px solid #FFFFFF;margin-top:-2px;filter:drop-shadow(0 2px 2px rgba(0,0,0,0.2));
-    "></div>
-  `;
-  wrapper.appendChild(inner);
+  wrapper.className = className;
+  wrapper.innerHTML = html;
   return wrapper;
 }
-
-function createIncidentDomElement(inc) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'maplibre-incident-wrapper';
-  wrapper.style.cursor = 'pointer';
-
-  const sev = inc.severity || 'HIGH';
-  const color = sev === 'CRITICAL' ? '#EF4444' : sev === 'HIGH' ? '#F97316' : '#F59E0B';
-  const size = sev === 'CRITICAL' ? 42 : 36;
-
-  const inner = document.createElement('div');
-  inner.style.display = 'flex';
-  inner.style.flexDirection = 'column';
-  inner.style.alignItems = 'center';
-  inner.style.pointerEvents = 'auto';
-
-  inner.innerHTML = `
-    <!-- Severity Banner -->
-    <div style="
-      background:${color};color:#FFFFFF;padding:2px 7px;border-radius:10px;
-      font-size:9.5px;font-weight:800;white-space:nowrap;box-shadow:0 3px 8px rgba(0,0,0,0.3);
-      margin-bottom:-4px;z-index:10;border:1.5px solid #FFFFFF;letter-spacing:0.4px;font-family:'Inter',sans-serif;
-    ">
-      ${sev} 🚨
-    </div>
-
-    <!-- Pin Body -->
-    <div style="
-      position:relative;width:${size}px;height:${size}px;border-radius:50%;
-      background:${color};border:3px solid #FFFFFF;
-      box-shadow:0 4px 16px rgba(239,68,68,0.45);
-      display:flex;align-items:center;justify-content:center;
-    ">
-      <div style="position:absolute;inset:-6px;border-radius:50%;background:${color};opacity:0.25;animation:inc-pulse 1.2s infinite"></div>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2L2 22h20L12 2z" fill="white"/>
-        <line x1="12" y1="9" x2="12" y2="14" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>
-        <circle cx="12" cy="18" r="1.2" fill="${color}"/>
-      </svg>
-    </div>
-
-    <!-- Tip -->
-    <div style="
-      width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;
-      border-top:8px solid #FFFFFF;margin-top:-2px;
-    "></div>
-  `;
-  wrapper.appendChild(inner);
-  return wrapper;
+// Redraws a marker in place (keeping its listeners and position) when its look changed.
+function redrawMarker(marker, key, html) {
+  const el = marker.getElement();
+  if (el.dataset.markerKey === key) return;
+  el.dataset.markerKey = key;
+  el.innerHTML = html;
 }
-
-function createHospitalDomElement(h) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'maplibre-hospital-wrapper';
-  wrapper.style.cursor = 'pointer';
-
-  const beds = h.available_beds ?? 12;
-  const icu = h.icu_beds_available ?? 4;
-  const color = beds > 10 ? '#2563EB' : beds > 3 ? '#F59E0B' : '#EF4444';
-
-  const inner = document.createElement('div');
-  inner.style.display = 'flex';
-  inner.style.flexDirection = 'column';
-  inner.style.alignItems = 'center';
-  inner.style.pointerEvents = 'auto';
-
-  inner.innerHTML = `
-    <!-- Bed count pill -->
-    <div style="
-      background:#1E293B;color:#FFFFFF;padding:1px 6px;border-radius:10px;
-      font-size:9px;font-weight:800;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.25);
-      margin-bottom:-3px;z-index:10;border:1px solid #FFFFFF;font-family:'Inter',sans-serif;
-    ">
-      ${beds} BEDS (${icu} ICU)
-    </div>
-
-    <!-- Pin Body -->
-    <div style="
-      width:34px;height:34px;border-radius:10px;
-      background:${color};border:2.5px solid #FFFFFF;
-      box-shadow:0 4px 12px rgba(37,99,235,0.35);
-      display:flex;align-items:center;justify-content:center;
-    ">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-        <path d="M12 4v16M4 12h16" stroke="white" stroke-width="3" stroke-linecap="round"/>
-      </svg>
-    </div>
-
-    <!-- Tip -->
-    <div style="
-      width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;
-      border-top:7px solid #FFFFFF;margin-top:-2px;
-    "></div>
-  `;
-  wrapper.appendChild(inner);
-  return wrapper;
-}
+const createAmbulanceDomElement = (amb) => {
+  const el = markerElement(`maplibre-ambulance-wrapper amb-node-${amb.id}`, ambulanceMarkerHtml(amb));
+  el.dataset.markerKey = ambulanceMarkerKey(amb);
+  return el;
+};
+const createIncidentDomElement = (inc) => {
+  const el = markerElement('maplibre-incident-wrapper', incidentMarkerHtml(inc));
+  el.dataset.markerKey = incidentMarkerKey(inc);
+  return el;
+};
+const createHospitalDomElement = (h) => markerElement('maplibre-hospital-wrapper', hospitalMarkerHtml(h));
 
 export default function DispatchMap({
   incidents = [],
@@ -419,6 +274,11 @@ export default function DispatchMap({
       map.resize();
     });
 
+    // Marker labels hide below city zoom so pins don't pile up.
+    const syncLabelZoom = () => map.getContainer().classList.toggle('mk-zoomed-out', map.getZoom() < 12);
+    map.on('zoom', syncLabelZoom);
+    syncLabelZoom();
+
     const resizeObserver = new ResizeObserver(() => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.resize();
@@ -458,6 +318,7 @@ export default function DispatchMap({
       const existing = markersRef.current.incidents.get(inc.id);
       if (existing) {
         existing.setLngLat(lngLat);
+        redrawMarker(existing, incidentMarkerKey(inc), incidentMarkerHtml(inc));
       } else {
         const el = createIncidentDomElement(inc);
         el.addEventListener('click', () => onIncidentClick?.(inc));
@@ -465,7 +326,7 @@ export default function DispatchMap({
         const popup = new maplibregl.Popup({ offset: [0, -45], closeButton: true, className: 'google-maplibre-popup' })
           .setHTML(`
             <div style="font-family:'Inter',sans-serif;padding:6px 8px;min-width:180px;">
-              <div style="font-weight:800;font-size:13px;color:#0F172A;margin-bottom:2px;">🚨 ${inc.incident_type || 'Emergency Incident'}</div>
+              <div style="font-weight:800;font-size:13px;color:#0F172A;margin-bottom:2px;">${inc.incident_type || 'Emergency incident'}</div>
               <div style="font-size:11px;color:#475569;margin-bottom:6px;">${inc.location_address || 'Bengaluru'}</div>
               <div style="display:flex;gap:6px;">
                 <span style="background:#FEE2E2;color:#EF4444;border-radius:4px;padding:2px 6px;font-size:10.5px;font-weight:800">${inc.severity}</span>
@@ -504,6 +365,7 @@ export default function DispatchMap({
       const existing = markersRef.current.ambulances.get(amb.id);
       if (existing) {
         existing.setLngLat(lngLat);
+        redrawMarker(existing, ambulanceMarkerKey(amb), ambulanceMarkerHtml(amb));
       } else {
         const el = createAmbulanceDomElement(amb);
         el.addEventListener('click', () => {
@@ -515,7 +377,7 @@ export default function DispatchMap({
         const popup = new maplibregl.Popup({ offset: [0, -45], closeButton: true, className: 'google-maplibre-popup' })
           .setHTML(`
             <div style="font-family:'Inter',sans-serif;padding:6px 8px;min-width:180px;">
-              <div style="font-weight:800;font-size:13px;color:#0F172A;">🚑 ${amb.call_sign || amb.vehicle_number}</div>
+              <div style="font-weight:800;font-size:13px;color:#0F172A;">${amb.call_sign || amb.vehicle_number}</div>
               <div style="font-size:11px;color:#475569;margin-bottom:4px;">Driver: ${amb.driver || 'Active Paramedic'}</div>
               <div style="font-size:11px;font-weight:700;color:#2563EB;">Status: ${amb.status} (Speed: ${amb.speed || 0} km/h)</div>
             </div>
@@ -556,7 +418,7 @@ export default function DispatchMap({
         const popup = new maplibregl.Popup({ offset: [0, -40], closeButton: true, className: 'google-maplibre-popup' })
           .setHTML(`
             <div style="font-family:'Inter',sans-serif;padding:6px 8px;min-width:180px;">
-              <div style="font-weight:800;font-size:13px;color:#0F172A;margin-bottom:2px;">🏥 ${h.name}</div>
+              <div style="font-weight:800;font-size:13px;color:#0F172A;margin-bottom:2px;">${h.name}</div>
               <div style="font-size:11px;color:#475569;margin-bottom:4px;">Emergency Receiving Hospital</div>
               <div style="font-size:11px;font-weight:700;color:#2563EB;">Available Beds: ${h.available_beds || 12} (ICU: ${h.icu_beds_available || 4})</div>
             </div>
@@ -806,7 +668,7 @@ export default function DispatchMap({
             if (badge) {
               const ambObj = ambulances.find(a => a.id === ambId);
               const callsign = ambObj?.call_sign || ambId;
-              badge.innerHTML = `${callsign} • ${remainingKm} km (${remainingMinutes}m)`;
+              badge.textContent = routeBadgeText(callsign, remainingKm, remainingMinutes);
             }
           }
 
@@ -890,7 +752,7 @@ export default function DispatchMap({
           <AltRouteIcon sx={{ color: '#F59E0B', fontSize: 22 }} />
           <Box>
             <Typography sx={{ fontSize: '12.5px', fontWeight: 800, fontFamily: 'Inter, sans-serif' }}>
-              🚨 Deviation Detected — Alternate Route Active
+              Deviation detected — Alternate Route Active
             </Typography>
             <Typography sx={{ fontSize: '11px', color: '#94A3B8', fontFamily: 'Inter, sans-serif' }}>
               {rerouteAlert.unit} re-routed to destination ({rerouteAlert.distanceKm} km • ETA {rerouteAlert.etaMinutes} min)
