@@ -80,6 +80,13 @@ function createApp(options = {}) {
   app.patch('/api/ambulances/:id/location',route(async(req,res) => {
     const {latitude,longitude}=req.body;
     if (!Number.isFinite(latitude)||Math.abs(latitude)>90||!Number.isFinite(longitude)||Math.abs(longitude)>180) throw fail(400,'Valid latitude and longitude required');
+    const recordedAt=req.body.recordedAt;
+    if(recordedAt!==undefined&&(typeof recordedAt!=='string'||!Number.isFinite(Date.parse(recordedAt))||Date.parse(recordedAt)>Date.now()+30000))throw fail(400,'Valid GPS observation time required');
+    if(recordedAt!==undefined){
+      const observed=new Date(recordedAt).toISOString();
+      const rows=await db(req,'ambulances',eq(req.params.id)+`&or=(last_ping.is.null,last_ping.lte.${encodeURIComponent(observed)})`,'PATCH',{latitude,longitude,last_ping:observed});
+      return res.json(rows?.[0]||await one(req,'ambulances',req.params.id));
+    }
     res.json(await write(req,'ambulances',req.params.id,{latitude,longitude,last_ping:new Date().toISOString()}));
   }));
   app.patch('/api/ambulances/:id/status',route(async(req,res) => {
