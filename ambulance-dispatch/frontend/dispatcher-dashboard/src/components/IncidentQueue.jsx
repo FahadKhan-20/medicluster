@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Typography } from '@mui/material';
 import { T, MONO, tagSx } from '../theme/dispatchTokens';
 import { FILTERS } from './incidentFilters';
+import { shortIncidentId } from '../services/incidentLabel';
 
 const STATUS = {
   PENDING:      { label: 'Pending',      color: T.yT },
@@ -63,10 +64,10 @@ export default function IncidentQueue({ incidents, onSelect, selectedId, filter 
                 {st.label}
               </Typography>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <Box component="span" sx={tagSx(inc.severity)}>{inc.severity || 'HIGH'}</Box>
-              <Typography sx={{ fontSize: 12.5, color: T.tx3 }}>
-                {inc.id} · {inc.created_at ? timeAgo(inc.created_at) : 'just now'}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <Box component="span" sx={{ ...tagSx(inc.severity), flexShrink: 0 }}>{inc.severity || 'HIGH'}</Box>
+              <Typography sx={{ fontSize: 12.5, color: T.tx3, minWidth: 0 }} noWrap title={inc.id}>
+                {shortIncidentId(inc.id)} · {inc.created_at ? timeAgo(inc.created_at) : 'just now'}
               </Typography>
             </Box>
             <Typography sx={{ fontSize: 12.5, color: T.tx2 }} noWrap>
