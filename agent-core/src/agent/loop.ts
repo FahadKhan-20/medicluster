@@ -59,8 +59,11 @@ export interface AgentLoopDeps {
   health: { isUp(name: string): boolean };
 }
 
-/** `queued` marks that this run put the event (back) on the retry queue. */
-type Ctx = { event: Event; doc: any; auditId: string; queued: boolean };
+/**
+ * `keep` means retryPending must not ack this event: the run put it (back) on the queue, or it
+ * was blocked because another live run holds its key and may still re-enqueue it.
+ */
+type Ctx = { event: Event; doc: any; auditId: string; keep: boolean };
 type Result = { outcome: Outcome; reason?: string };
 type Stage = "uploaded" | "analyzed";
 
@@ -96,8 +99,9 @@ export class AgentLoop {
   }
 
   /**
-   * Re-handle queued events and ack every one that was not queued again (pending, or blocked
-   * by the kill switch). Returns how many were handled. Overlapping calls share one run.
+   * Re-handle queued events and ack every one not kept (re-enqueued as pending or blocked by the
+   * kill switch, or blocked by a key held by a live run). Returns how many were handled.
+   * Overlapping calls share one run.
    */
   retryPending(): Promise<number> {
     this.retrying ??= this.drainQueue().finally(() => {
@@ -110,16 +114,16 @@ export class AgentLoop {
     if (await this.d.state.isStopped()) return 0;
     const events = await this.d.state.drain();
     for (const e of events) {
-      const { queued } = await this.process(e as Event);
-      if (!queued) await this.d.state.ack(e.id);
+      const { keep } = await this.process(e as Event);
+      if (!keep) await this.d.state.ack(e.id);
     }
     return events.length;
   }
 
-  private async process(event: Event): Promise<{ outcome: Outcome; queued: boolean }> {
-    if (event.type === "service.up" || event.type === "service.down") return { outcome: "skipped", queued: false };
+  private async process(event: Event): Promise<{ outcome: Outcome; keep: boolean }> {
+    if (event.type === "service.up" || event.type === "service.down") return { outcome: "skipped", keep: false };
     const doc = stripDoc(event.doc);
-    const c: Ctx = { event: { ...event, doc }, doc, auditId: await this.d.audit.start({ ...event, doc }), queued: false };
+    const c: Ctx = { event: { ...event, doc }, doc, auditId: await this.d.audit.start({ ...event, doc }), keep: false };
     let r: Result;
     try {
       r = await this.run(c);
@@ -129,12 +133,31 @@ export class AgentLoop {
       throw e;
     }
     await this.d.audit.finish(c.auditId, r.outcome, r.reason);
-    return { outcome: r.outcome, queued: c.queued };
+    return { outcome: r.outcome, keep: c.keep };
   }
 
   private async enqueue(c: Ctx): Promise<void> {
     await this.d.state.enqueue(c.event);
-    c.queued = true;
+    c.keep = true;
+  }
+
+  /**
+   * Run `write` holding `key`: has() and add() happen with no await between them, and only the
+   * run that added the key releases it. A key held by another live run gives blocked "duplicate".
+   */
+  private async withKey(c: Ctx, key: string, write: () => Promise<Result>): Promise<Result> {
+    if (this.inFlight.has(key)) return this.heldElsewhere(c);
+    this.inFlight.add(key);
+    try {
+      return await write();
+    } finally {
+      this.inFlight.delete(key);
+    }
+  }
+
+  private heldElsewhere(c: Ctx): Result {
+    c.keep = true;
+    return { outcome: "blocked", reason: "duplicate" };
   }
 
   private step(c: Ctx, kind: string, data: object): Promise<void> {
@@ -190,18 +213,12 @@ export class AgentLoop {
 
     if (verdict.verdict === "blocked") {
       if (verdict.reason === "stopped") await this.enqueue(c);
+      if (verdict.reason === "duplicate" && !done) return this.heldElsewhere(c);
       return { outcome: "blocked", reason: verdict.reason };
     }
     if (verdict.verdict === "review") return this.review(c, verdict.reason);
     if (!STAGE_ACTIONS[stage].includes(action)) return this.review(c, "stage_not_allowed");
-    // Claim the key before the next await so a concurrent run sees it as a duplicate.
-    if (this.inFlight.has(key)) return { outcome: "blocked", reason: "duplicate" };
-    this.inFlight.add(key);
-    try {
-      return await this.execute(c, tool, key, answers, facts);
-    } finally {
-      this.inFlight.delete(key);
-    }
+    return this.withKey(c, key, () => this.execute(c, tool, key, answers, facts));
   }
 
   /** Review on upload is audit-only; on an analysed scan, ask for a clinician review once, if policy allows. */
@@ -221,14 +238,11 @@ export class AgentLoop {
       done: done || this.inFlight.has(key),
     });
     await this.step(c, "review_gate", { key, ...verdict });
-    if (verdict.verdict === "blocked") return { outcome: "review", reason };
-    this.inFlight.add(key);
-    try {
-      const r = await this.runTool(c, tool, key, { fileId: c.doc.gridfs_id });
-      return r.outcome === "executed" ? { outcome: "review", reason } : r;
-    } finally {
-      this.inFlight.delete(key);
+    if (verdict.verdict === "blocked") {
+      return verdict.reason === "duplicate" && !done ? this.heldElsewhere(c) : { outcome: "review", reason };
     }
+    const r = await this.withKey(c, key, () => this.runTool(c, tool, key, { fileId: c.doc.gridfs_id }));
+    return r.outcome === "executed" ? { outcome: "review", reason } : r;
   }
 
   private async execute(c: Ctx, tool: Tool, key: string, answers: Record<string, Answer>, facts: object): Promise<Result> {
@@ -271,13 +285,15 @@ export class AgentLoop {
     });
   }
 
-  /** The single write path: validate, re-check the kill switch, call, classify, mark done. */
+  /** The single write path (caller holds `key`): validate, re-check done and kill switch, call, classify, mark done. */
   private async runTool(c: Ctx, tool: Tool, key: string, args: Record<string, unknown>): Promise<Result> {
     const errors = validateArgs(tool, args);
     if (errors.length) {
       await this.step(c, "tool", { tool: tool.name, key, errors });
       return { outcome: "failed", reason: "invalid_args" };
     }
+    // A run that finished and released the key since our gate check has already written.
+    if (await this.d.state.isDone(key)) return { outcome: "blocked", reason: "duplicate" };
     if (await this.d.state.isStopped()) {
       await this.enqueue(c);
       return { outcome: "blocked", reason: "stopped" };
@@ -285,7 +301,7 @@ export class AgentLoop {
     const result = await tool.run(args, this.d.backend as BackendClient);
     await this.step(c, "tool", { tool: tool.name, key, args, result });
     if (!result.ok) {
-      const clientError = result.status >= 400 && result.status < 500;
+      const clientError = result.status >= 400 && result.status < 500 && result.status !== 408 && result.status !== 429;
       const invalid = result.status === 0 && result.error.startsWith("invalid arguments");
       return clientError || invalid
         ? { outcome: "failed", reason: "backend_error" }

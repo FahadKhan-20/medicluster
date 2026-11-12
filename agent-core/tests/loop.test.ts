@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { AgentLoop, ARGS_PROMPT, JEV_QUESTIONS, STATE_PROMPT } from "../src/agent/loop.js";
 import { FakeJev, fallbackAnswer, type Answer, type Decider, type Question } from "../src/judge/jev.js";
 import { FakeLlm, ProviderError } from "../src/llm/provider.js";
@@ -76,6 +76,7 @@ function setup(o: {
   up?: Record<string, boolean>;
   backendFails?: boolean;
   backendResult?: () => any;
+  backendCall?: (method: string, path: string) => Promise<any>;
   policy?: any;
 } = {}) {
   const { rpc, db } = fakeRpc();
@@ -87,6 +88,7 @@ function setup(o: {
   const backend = {
     async call(method: string, path: string, body?: unknown) {
       calls.push({ method, path, body });
+      if (o.backendCall) return o.backendCall(method, path);
       if (o.backendResult) return o.backendResult();
       if (o.backendFails) return { ok: false as const, status: 400, error: "HTTP 400", retryable: false as const };
       return { ok: true as const, status: 200, data: {} };
@@ -472,5 +474,54 @@ describe("AgentLoop", () => {
     await a.loop.handle(analyzed());
     const sent = JSON.parse(a.llm.calls.find((c) => c.system === ARGS_PROMPT)!.user);
     expect(Object.keys(sent.tool.schema.properties)).toEqual(["title", "summary"]);
+  });
+
+  // ---- fix round 2 ----
+
+  it("concurrent reviews of the same event post one request_review", async () => {
+    const t = setup({ jev: new FakeJev(jevRules("alert", 0.6)) });
+    const outcomes = await Promise.all([t.loop.handle(analyzed()), t.loop.handle(analyzed())]);
+    expect(t.calls.filter((c) => c.path === "/api/media/review/g1")).toHaveLength(1);
+    expect(outcomes.sort()).toEqual(["blocked", "review"]);
+  });
+
+  it("in-flight duplicate during retry does not ack", async () => {
+    let down = true;
+    let release!: (r: any) => void;
+    let entered!: () => void;
+    const inWrite = new Promise<void>((r) => (entered = r));
+    const t = setup({
+      llm: (s, u) => {
+        if (down) throw new ProviderError("provider HTTP 503");
+        return s === STATE_PROMPT ? STATE : argsFor(u);
+      },
+      backendCall: () => {
+        entered();
+        return new Promise((r) => (release = r));
+      },
+    });
+    const e = analyzed();
+    expect(await t.loop.handle(e)).toBe("pending");
+    down = false;
+    const ack = vi.spyOn(t.state, "ack");
+    const live = t.loop.handle(e);
+    await inWrite;
+    expect(await t.loop.retryPending()).toBe(1);
+    expect(ack).not.toHaveBeenCalled();
+    expect(t.audits().at(-1)).toMatchObject({ outcome: "blocked", reason: "duplicate" });
+    release({ ok: false, status: 503, error: "HTTP 503", retryable: false });
+    expect(await live).toBe("pending");
+    expect((await t.state.drain()).map((x) => x.id)).toEqual([e.id]);
+  });
+
+  it("408 and 429 backend responses are retryable", async () => {
+    for (const status of [408, 429]) {
+      const t = setup({ backendResult: () => ({ ok: false, status, error: `HTTP ${status}`, retryable: false }) });
+      expect(await t.loop.handle(analyzed())).toBe("pending");
+      expect(t.audits()[0].reason).toBe("backend_unavailable");
+      expect(await t.state.drain()).toHaveLength(1);
+    }
+    const t = setup({ backendResult: () => ({ ok: false, status: 404, error: "HTTP 404", retryable: false }) });
+    expect(await t.loop.handle(analyzed())).toBe("failed");
   });
 });
