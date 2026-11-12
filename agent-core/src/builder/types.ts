@@ -44,6 +44,8 @@ export interface ProcessRunOptions {
   cwd?: string;
   env?: Record<string, string>;
   timeoutMs?: number;
+  isStopped?: () => Promise<boolean>;
+  pollIntervalMs?: number;
 }
 
 export interface ProcessRunner {

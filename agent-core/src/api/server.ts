@@ -121,11 +121,18 @@ export function createServer(deps: ServerDeps): http.Server {
       if (!builder) {
         return send(res, 503, { error: "Builder service not configured" });
       }
-      const result = await builder.handleTask({
-        title: task.title.trim(),
-        description: task.description.trim(),
-      });
-      return send(res, 200, result);
+      try {
+        const result = await builder.handleTask({
+          title: task.title.trim(),
+          description: task.description.trim(),
+        });
+        return send(res, 200, result);
+      } catch (err: any) {
+        if (err?.status === 409 || err?.name === "BuilderConcurrencyError") {
+          return send(res, 409, { error: err.message });
+        }
+        throw err;
+      }
     }
 
     // POST /command
