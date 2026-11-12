@@ -9,4 +9,5 @@ groups:
   builder: suggest
   ecg: auto
   sepsis: auto
+  pharmacy: auto
 rate_limit_per_minute: 30
