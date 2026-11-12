@@ -69,6 +69,60 @@ describe("DispatchClient", () => {
     expect(attempts).toBe(1); // 4xx does not retry
   });
 
+  it("never retries POST requests on 5xx or network errors (retry GET only)", async () => {
+    let postAttempts = 0;
+    const failingPost500 = vi.fn(async () => {
+      postAttempts++;
+      return new Response(JSON.stringify({ error: "server error" }), { status: 500 });
+    });
+
+    const client = new DispatchClient({
+      fetch: failingPost500 as unknown as typeof fetch,
+      retries: 3,
+      backoffMs: 1,
+    });
+
+    const res = await client.assignAmbulance({
+      incident_id: "INC-1",
+      ambulance_id: "AMB-1",
+      hospital_id: "H-1",
+    });
+
+    expect(res.ok).toBe(false);
+    expect(postAttempts).toBe(1); // Exactly 1 attempt, NEVER retried
+  });
+
+  it("never retries POST requests on network exceptions", async () => {
+    let postAttempts = 0;
+    const failingNet = vi.fn(async () => {
+      postAttempts++;
+      throw new Error("connection reset");
+    });
+
+    const client = new DispatchClient({
+      fetch: failingNet as unknown as typeof fetch,
+      retries: 3,
+      backoffMs: 1,
+    });
+
+    const res = await client.call("POST", "/api/assignments", { some: "data" });
+    expect(res.ok).toBe(false);
+    expect(postAttempts).toBe(1); // Exactly 1 attempt
+  });
+
+  it("supports getPendingIncidents", async () => {
+    let requestedUrl = "";
+    const fakeFetch = vi.fn(async (url: string) => {
+      requestedUrl = url;
+      return new Response(JSON.stringify([{ id: "INC-1", status: "PENDING" }]), { status: 200 });
+    });
+
+    const client = new DispatchClient({ fetch: fakeFetch as unknown as typeof fetch });
+    const res = await client.getPendingIncidents();
+    expect(res.ok).toBe(true);
+    expect(requestedUrl).toBe("http://dispatch-api:3001/api/incidents?status=PENDING");
+  });
+
   it("supports getAvailableAmbulances with coordinates", async () => {
     let requestedUrl = "";
     const fakeFetch = vi.fn(async (url: string) => {

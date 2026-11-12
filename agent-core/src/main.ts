@@ -7,6 +7,7 @@ import { AgentState } from "./control/state.js";
 import { PolicyStore } from "./control/policy.js";
 import { Gate } from "./control/gate.js";
 import { BackendClient } from "./tools/backend.js";
+import { DispatchClient } from "./tools/dispatch.js";
 import { EventSource, realtimeSubscribe, type Event } from "./events/events.js";
 import { HealthPoller } from "./events/health.js";
 import { AgentLoop } from "./agent/loop.js";
@@ -29,6 +30,11 @@ async function main(): Promise<void> {
     baseUrl: config.backendUrl,
     token: () => signAgentToken(config.agentJwtSecret),
   });
+  const dispatchUrl = process.env.DISPATCH_URL || "http://dispatch-api:3001";
+  const dispatchClient = new DispatchClient({
+    baseUrl: dispatchUrl,
+    token: () => signAgentToken(config.agentJwtSecret),
+  });
   const jev = new JevClient({ apiKey: config.openrouterKey, model: config.jevModel });
   const llm = new OmniRouteProvider({ url: config.omnirouteUrl, apiKey: config.omnirouteKey, model: config.agentModel });
   const health = new HealthPoller({
@@ -36,15 +42,50 @@ async function main(): Promise<void> {
       backend: `${config.backendUrl}/api/health`,
       ml: `${config.mlUrl}/health`,
       intelligence: `${config.intelUrl}/`,
+      dispatch: `${dispatchUrl}/health`,
     },
   });
   const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health });
-  const dispatchWorkflow = createDispatchWorkflow({ jev, llm, audit, state, gate, health, agentJwtSecret: config.agentJwtSecret });
+  const dispatchWorkflow = createDispatchWorkflow({
+    jev,
+    llm,
+    audit,
+    state,
+    gate,
+    health,
+    dispatchClient,
+  });
   const work = trackInFlight();
   const retry = work.wrap(() =>
-    loop.retryPending().catch((err) => console.error("[agent-core] retryPending failed", err)),
+    Promise.all([
+      loop.retryPending().catch((err) => console.error("[agent-core] retryPending loop failed", err)),
+      dispatchWorkflow.retryPending().catch((err) => console.error("[agent-core] retryPending dispatch failed", err)),
+    ]),
   );
   const handle = work.wrap((e: Event) => loop.handle(e).then(() => undefined));
+
+  // Poll dispatch API every 10s for new PENDING incidents to feed dispatchWorkflow
+  const pollDispatch = work.wrap(async () => {
+    if (health.isUp("dispatch") === false) return;
+    try {
+      const res = await dispatchClient.getPendingIncidents();
+      if (res.ok && Array.isArray(res.data)) {
+        for (const inc of res.data) {
+          if (inc && inc.id && inc.status === "PENDING" && !inc.assigned_ambulance_id) {
+            await dispatchWorkflow.handle({
+              id: inc.id,
+              type: "incident.pending",
+              incidentId: inc.id,
+              doc: inc,
+              at: typeof inc.created_at === "string" ? inc.created_at : new Date().toISOString(),
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[agent-core] dispatch poll failed", err);
+    }
+  });
 
   const events = new EventSource({
     store,
@@ -58,9 +99,13 @@ async function main(): Promise<void> {
 
   policyStore.watch();
   await health.start((e: Event) => {
-    if (e.type === "service.up") void retry();
+    if (e.type === "service.up") {
+      void retry();
+      void pollDispatch();
+    }
   });
   const retryTimer = setInterval(() => void retry(), RETRY_INTERVAL_MS);
+  const dispatchPollTimer = setInterval(() => void pollDispatch(), 10_000);
   await events.start(handle);
 
   let shuttingDown = false;
@@ -72,6 +117,7 @@ async function main(): Promise<void> {
     events.stop();
     health.stop();
     clearInterval(retryTimer);
+    clearInterval(dispatchPollTimer);
     policyStore.close();
     await work.drain();
     server.close(() => process.exit(0));

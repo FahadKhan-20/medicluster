@@ -15,12 +15,25 @@ function verifyAgentToken(token, secret) {
     if (parts[2].length !== expected.length) return null;
     if (!timingSafeEqual(Buffer.from(parts[2]), Buffer.from(expected))) return null;
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-    if (payload.exp && Date.now() >= payload.exp * 1000) return null;
+    if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) return null;
+    if (Date.now() >= payload.exp * 1000) return null;
     if (payload.sub !== 'agent-core' || payload.kind !== 'agent') return null;
     return payload;
   } catch {
     return null;
   }
+}
+
+const AGENT_ALLOWLIST = [
+  { method: 'GET', pattern: /^\/api\/incidents(\/.*)?$/ },
+  { method: 'GET', pattern: /^\/api\/ambulances(\/.*)?$/ },
+  { method: 'GET', pattern: /^\/api\/hospitals(\/.*)?$/ },
+  { method: 'GET', pattern: /^\/api\/assignments\/recommendations(\/.*)?$/ },
+  { method: 'POST', pattern: /^\/api\/assignments\/?$/ },
+];
+
+function isAgentRouteAllowed(method, fullPath) {
+  return AGENT_ALLOWLIST.some(r => r.method === method && r.pattern.test(fullPath));
 }
 
 const lifecycle = ['PENDING','ASSIGNED','EN_ROUTE_TO_SCENE','ON_SCENE','TRANSPORTING_TO_HOSPITAL','ARRIVED_AT_HOSPITAL','RESOLVED','CANCELLED'];
@@ -65,6 +78,10 @@ function createApp(options = {}) {
     if (agentSecret && agentSecret.length >= 32) {
       const agent = verifyAgentToken(token, agentSecret);
       if (agent) {
+        const fullPath = (req.baseUrl || '') + (req.path || '');
+        if (!isAgentRouteAllowed(req.method, fullPath)) {
+          return res.status(403).json({ error: 'Agent access not permitted for this route' });
+        }
         req.agent = true;
         req.user = { id: 'agent-core' };
         req.profile = { id: 'agent-core', role: 'DISPATCHER', email: 'agent@medicluster.local' };

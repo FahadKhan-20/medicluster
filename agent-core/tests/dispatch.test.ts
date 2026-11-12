@@ -76,6 +76,8 @@ function setup(o: {
   hospitals?: any[];
   dispatchCall?: (method: string, path: string, body?: any) => Promise<any>;
   assignStatus?: number;
+  getIncident?: (id: string) => Promise<any>;
+  getScoredHospitals?: (id: string) => Promise<any>;
 } = {}) {
   const { rpc } = fakeRpc();
   const store = new McStore(rpc);
@@ -103,8 +105,9 @@ function setup(o: {
     },
     async getIncident(id: string) {
       calls.push({ method: "GET", path: `/api/incidents/${id}` });
-      if (incident && incident.id === id) {
-        return { ok: true as const, status: 200, data: incident };
+      if (o.getIncident) return o.getIncident(id);
+      if (incident) {
+        return { ok: true as const, status: 200, data: { ...incident, id } };
       }
       return { ok: false as const, status: 404, error: "Incident not found", retryable: false as const };
     },
@@ -114,6 +117,7 @@ function setup(o: {
     },
     async getScoredHospitals(id: string) {
       calls.push({ method: "GET", path: `/api/hospitals/scored/${id}` });
+      if (o.getScoredHospitals) return o.getScoredHospitals(id);
       return { ok: true as const, status: 200, data: { hospitals } };
     },
     async getRecommendations(id: string) {
@@ -296,6 +300,72 @@ describe("DispatchWorkflow", () => {
       doc: SAMPLE_INCIDENT,
     });
     expect(outcome).toBe("blocked");
+  });
+
+  it("refetches incident right before write and blocks if status changed to non-PENDING", async () => {
+    let getCalls = 0;
+    const { workflow, calls } = setup({
+      policy: AUTO_POLICY,
+      getIncident: async (id: string) => {
+        getCalls++;
+        if (getCalls === 1) {
+          return { ok: true, status: 200, data: SAMPLE_INCIDENT };
+        }
+        return { ok: true, status: 200, data: { ...SAMPLE_INCIDENT, status: "RESOLVED" } };
+      },
+    });
+
+    const outcome = await workflow.handle({
+      id: "INC-101",
+      type: "incident.pending",
+      incidentId: "INC-101",
+    });
+    expect(outcome).toBe("blocked");
+    expect(calls.some((c) => c.method === "POST" && c.path === "/api/assignments")).toBe(false);
+  });
+
+  it("refetches incident right before write and blocks if ambulance was assigned concurrently", async () => {
+    let getCalls = 0;
+    const { workflow, calls } = setup({
+      policy: AUTO_POLICY,
+      getIncident: async (id: string) => {
+        getCalls++;
+        if (getCalls === 1) {
+          return { ok: true, status: 200, data: SAMPLE_INCIDENT };
+        }
+        return { ok: true, status: 200, data: { ...SAMPLE_INCIDENT, status: "PENDING", assigned_ambulance_id: "AMB-99" } };
+      },
+    });
+
+    const outcome = await workflow.handle({
+      id: "INC-101",
+      type: "incident.pending",
+      incidentId: "INC-101",
+    });
+    expect(outcome).toBe("blocked");
+    expect(calls.some((c) => c.method === "POST" && c.path === "/api/assignments")).toBe(false);
+  });
+
+  it("rechecks kill switch immediately before DISPATCH_ASSIGN_TOOL.run (after hospital lookup)", async () => {
+    const { workflow, state, calls } = setup({
+      policy: AUTO_POLICY,
+      getScoredHospitals: async () => {
+        // Stop kill switch while hospital lookup is resolving!
+        await state.setStopped(true);
+        return { ok: true, status: 200, data: { hospitals: SAMPLE_HOSPITALS } };
+      },
+    });
+
+    const outcome = await workflow.handle({
+      id: "INC-101",
+      type: "incident.pending",
+      incidentId: "INC-101",
+      doc: SAMPLE_INCIDENT,
+    });
+
+    expect(outcome).toBe("blocked");
+    // Tool was never called because kill switch was tripped after hospital lookup
+    expect(calls.some((c) => c.method === "POST" && c.path === "/api/assignments")).toBe(false);
   });
 
   it("yields review on Jev fallback", async () => {

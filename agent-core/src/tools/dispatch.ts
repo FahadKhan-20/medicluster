@@ -91,7 +91,9 @@ export class DispatchClient {
     const url = `${this.baseUrl}${path}`;
     let status = 0;
     let error = "";
-    for (let attempt = 0; attempt <= this.retries; attempt++) {
+    const isGet = method.toUpperCase() === "GET";
+    const maxAttempts = isGet ? this.retries : 0;
+    for (let attempt = 0; attempt <= maxAttempts; attempt++) {
       try {
         const headers: Record<string, string> = {};
         if (this.token) headers["Authorization"] = `Bearer ${this.token()}`;
@@ -117,14 +119,19 @@ export class DispatchClient {
           return { ok: true, status, data: data as T };
         }
         error = `HTTP ${status}: ${(await resp.text().catch(() => "")).slice(0, 200)}`;
-        if (status < 500) return { ok: false, status, error, retryable: false };
+        if (!isGet || status < 500) return { ok: false, status, error, retryable: false };
       } catch (e) {
         status = 0;
         error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        if (!isGet) return { ok: false, status, error, retryable: false };
       }
-      if (attempt < this.retries) await new Promise((r) => setTimeout(r, this.backoffMs * (attempt + 1)));
+      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, this.backoffMs * (attempt + 1)));
     }
     return { ok: false, status, error: error || "unknown error", retryable: false };
+  }
+
+  getPendingIncidents(): Promise<DispatchResult<Incident[]>> {
+    return this.call<Incident[]>("GET", "/api/incidents?status=PENDING");
   }
 
   getIncident(id: string): Promise<DispatchResult<Incident>> {

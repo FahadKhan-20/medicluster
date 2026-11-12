@@ -322,14 +322,31 @@ export class DispatchWorkflow {
       return { outcome: "blocked", reason: "stopped" };
     }
 
+    // Always refetch the incident right before the write and require status PENDING and unassigned
+    const refetched = await this.d.dispatch.getIncident(incident.id);
+    if (!refetched.ok) {
+      return refetched.status === 404
+        ? { outcome: "skipped", reason: "incident_not_found" }
+        : { outcome: "pending", reason: "dispatch_unavailable" };
+    }
+    const currentIncident = refetched.data;
+    if (currentIncident.status !== "PENDING") {
+      await this.step(c, "validation", { incidentId: currentIncident.id, status: currentIncident.status, reason: "not_pending" });
+      return { outcome: "blocked", reason: "not_pending" };
+    }
+    if (currentIncident.assigned_ambulance_id) {
+      await this.step(c, "validation", { incidentId: currentIncident.id, assigned_ambulance_id: currentIncident.assigned_ambulance_id, reason: "already_assigned" });
+      return { outcome: "blocked", reason: "never_reassign" };
+    }
+
     // Resolve hospital
-    let hospitalId = incident.assigned_hospital_id;
+    let hospitalId = currentIncident.assigned_hospital_id;
     if (!hospitalId) {
-      const hospResult = await this.d.dispatch.getScoredHospitals(incident.id);
+      const hospResult = await this.d.dispatch.getScoredHospitals(currentIncident.id);
       if (hospResult.ok && hospResult.data.hospitals?.length) {
         hospitalId = hospResult.data.hospitals[0].id;
       } else {
-        const recResult = await this.d.dispatch.getRecommendations(incident.id);
+        const recResult = await this.d.dispatch.getRecommendations(currentIncident.id);
         if (recResult.ok && recResult.data.hospitals?.length) {
           hospitalId = recResult.data.hospitals[0].id;
         }
@@ -341,11 +358,20 @@ export class DispatchWorkflow {
       return { outcome: "review", reason: "no_available_hospitals" };
     }
 
+    // Recheck the kill switch immediately before DISPATCH_ASSIGN_TOOL.run (after hospital lookups)
+    if (await this.d.state.isStopped()) {
+      await this.enqueue(c);
+      return { outcome: "blocked", reason: "stopped" };
+    }
+    if (await this.d.state.isDone(key)) {
+      return { outcome: "blocked", reason: "duplicate" };
+    }
+
     const unitProb = answers.unit?.probabilities?.[chosenUnitId] ?? 0;
     const actNow = answers.act_now?.noul ?? 0;
 
     const assignArgs = {
-      incident_id: incident.id,
+      incident_id: currentIncident.id,
       ambulance_id: chosenUnitId,
       hospital_id: hospitalId,
       notes: `Agent dispatch: unit ${chosenUnitId} (prob: ${unitProb.toFixed(2)}, act_now: ${actNow.toFixed(2)}, audit: ${c.auditId})`,
