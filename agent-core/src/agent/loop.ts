@@ -180,7 +180,7 @@ export class AgentLoop {
   }
 
   private async process(event: Event): Promise<{ outcome: Outcome; keep: boolean }> {
-    if (event.type === "service.up" || event.type === "service.down") return { outcome: "skipped", keep: false };
+    if (event.type === "service.up" || event.type === "service.down") return { outcome: "skipped", keep: true };
     const doc = stripDoc(event.doc);
     // Non-image uploads create no audit entries
     if (doc?.file_type !== "image") return { outcome: "skipped", keep: false };

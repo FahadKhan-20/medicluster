@@ -6,6 +6,7 @@ export class HealthPoller {
   private fetchImpl: typeof fetch;
   private up = new Map<string, boolean>();
   private timer?: ReturnType<typeof setInterval>;
+  private listeners: ((e: Event) => Promise<void> | void)[] = [];
 
   constructor(opts: { targets: Record<string, string>; intervalMs?: number; fetch?: typeof fetch }) {
     this.targets = opts.targets;
@@ -16,6 +17,13 @@ export class HealthPoller {
   /** Services are assumed up until a poll says otherwise. */
   isUp(name: string): boolean {
     return this.up.get(name) ?? true;
+  }
+
+  addListener(listener: (e: Event) => Promise<void> | void): () => void {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
   }
 
   async start(onEvent: (e: Event) => Promise<void> | void): Promise<void> {
@@ -45,10 +53,18 @@ export class HealthPoller {
         this.up.set(service, nowUp);
         const at = new Date().toISOString();
         const type = nowUp ? "service.up" : "service.down";
+        const event: Event = { id: `${service}:${nowUp ? "up" : "down"}:${at}`, type, service, at };
         try {
-          await onEvent({ id: `${service}:${nowUp ? "up" : "down"}:${at}`, type, service, at });
+          await onEvent(event);
         } catch {
           // a failing handler must not stop health polling
+        }
+        for (const listener of this.listeners) {
+          try {
+            await listener(event);
+          } catch {
+            // listener failure must not stop others
+          }
         }
       }),
     );
