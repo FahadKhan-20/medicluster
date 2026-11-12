@@ -5,4 +5,5 @@ groups:
   reminders: auto
   radar: auto
   selfheal: auto
+  dispatch: suggest
 rate_limit_per_minute: 30
