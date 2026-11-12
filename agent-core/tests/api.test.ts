@@ -62,7 +62,7 @@ describe("api", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const text = await res.text();
-    expect(text).toContain("Agent Auditor");
+    expect(text).toContain("CliniQ");
   });
 
   it("health is public", async () => {

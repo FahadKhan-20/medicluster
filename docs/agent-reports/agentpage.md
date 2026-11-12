@@ -11,7 +11,7 @@
 This deliverable integrates the autonomous agent system into MediCluster by providing:
 1. A **Backend Proxy Service** (`medicluster/backend/routes/agentRoutes.js`) securing all communication with `agent-core` (`http://localhost:8100`), enforcing role-based access control, injecting the upstream admin key securely, sanitizing responses, and handling upstream downtime with HTTP 503.
 2. A **Comprehensive Backend Test Suite** (`medicluster/backend/tests/agentProxy.test.js`) verifying authentication enforcement, role restrictions (admin vs. doctor vs. nurse), upstream downtime error handling, and key non-leakage.
-3. An **Agent Operations Workspace** (`medicluster/frontend/src/pages/AgentPage.jsx`) at `/agent` matching existing clinical application styles (`Page`, `Section`, `Tag`), displaying agent operational status, downstream component health (Backend, ML, Intelligence), kill switch control (Stop/Resume), 3-second live audit feed polling with outcome badges (`executed`, `review`, `blocked`, `skipped`, `failed`, `pending`), and direct links to the Agent Auditor and Code Blue War Room.
+3. An **Agent Operations Workspace** (`medicluster/frontend/src/pages/AgentPage.jsx`) at `/agent` matching existing clinical application styles (`Page`, `Section`, `Tag`), displaying agent operational status, downstream component health (Backend, ML, Intelligence), kill switch control (Stop/Resume), 3-second live audit feed polling with outcome badges (`executed`, `review`, `blocked`, `skipped`, `failed`, `pending`), and direct links to the CliniQ Console and Code Blue War Room.
 
 ---
 
@@ -51,7 +51,7 @@ This deliverable integrates the autonomous agent system into MediCluster by prov
   - Search filter across event details, reason, patient ID, and audit ID.
   - Expandable rows detailing raw event payloads and step-by-step execution traces.
 - **External Links**:
-  - "Open Agent Auditor" (`${VITE_AGENT_CORE_URL}/console`)
+  - "Open CliniQ Console" (`${VITE_AGENT_CORE_URL}/console`)
   - "Open Code Blue War Room" (`${VITE_AGENT_CORE_URL}/codeblue`)
 
 ---

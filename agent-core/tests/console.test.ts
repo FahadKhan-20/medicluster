@@ -63,7 +63,7 @@ describe("Console UI & API Security", () => {
     const html = getConsoleHtml();
     expect(typeof html).toBe("string");
     expect(html).toContain("<!DOCTYPE html>");
-    expect(html).toContain("Agent Auditor");
+    expect(html).toContain("CliniQ");
     expect(html).toContain("sessionStorage");
     expect(html).toContain("/audit");
     expect(html).toContain("/control/stop");
@@ -78,7 +78,7 @@ describe("Console UI & API Security", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const body = await res.text();
-    expect(body).toContain("Agent Auditor");
+    expect(body).toContain("CliniQ");
     expect(body).toContain("sessionStorage");
   });
 

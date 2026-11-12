@@ -21,6 +21,7 @@ import { createServer } from "./api/server.js";
 import { trackInFlight } from "./lifecycle.js";
 import { registerRadarWorkflow } from "./workflows/radar.js";
 import { CodeBlueEngine } from "./codeblue/session.js";
+import { getDefaultWorkflows, type WorkflowDescriptor } from "./workflows/registry.js";
 
 const RETRY_INTERVAL_MS = 60_000;
 
@@ -120,9 +121,12 @@ async function main(): Promise<void> {
   });
 
   const builder = new BuilderService({ audit, state, jev, gate });
+  const workflows: WorkflowDescriptor[] = getDefaultWorkflows();
   const server = createServer({
     audit, state, loop, health, store, adminKey: config.adminKey, builder,
     codeblue: new CodeBlueEngine({ jev, gate, audit, state, llm }),
+    policyStore,
+    workflows,
   });
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   log(`listening on ${config.port}`);

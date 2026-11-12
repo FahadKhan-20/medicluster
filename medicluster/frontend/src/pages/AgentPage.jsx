@@ -180,7 +180,7 @@ export default function AgentPage() {
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 h-8 px-3 text-[12.5px] font-medium rounded-sm border border-line-strong hover:bg-sunken text-ink transition-colors"
       >
-        <span>Open Agent Auditor</span>
+        <span>Open CliniQ Console</span>
         <ExternalLink size={13} className="text-slate-500" />
       </a>
       <a
