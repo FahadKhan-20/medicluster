@@ -9,7 +9,7 @@
 .mc-patient-app .pt-view,.mc-patient-app .pt-home { display:flex; flex-direction:column; min-height:0; flex:1; padding:18px; gap:12px; }
 .mc-patient-app .mc-patient-topbar { min-height:54px; padding:8px 18px; background:#f3f5ee; }
 .mc-patient-app .mc-patient-topbar a { color:#52644e; }
-.mc-patient-app .mc-patient-tabs { grid-template-columns:repeat(5,minmax(0,1fr)); padding:6px 8px max(8px,env(safe-area-inset-bottom)); gap:3px; }
+.mc-patient-app .mc-patient-tabs { grid-template-columns:repeat(auto-fit,minmax(0,1fr)); padding:6px 8px max(8px,env(safe-area-inset-bottom)); gap:3px; }
 .mc-patient-app .mc-patient-tabs a { min-height:52px; border-radius:15px; font-size:10px; gap:4px; }
 .mc-patient-app .mc-patient-greeting { flex-shrink:0; gap:8px; }
 .mc-patient-app .mc-patient-greeting h1 { font-size:25px; line-height:1.2; }

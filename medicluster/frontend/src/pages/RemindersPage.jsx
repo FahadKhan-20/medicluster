@@ -9,6 +9,7 @@ import {
   checkDrugInteractions,
   markDoseTaken,
 } from "../api/apiClient";
+import { requestRefill } from "../pharmacy/patientApi";
 import { Link } from "react-router-dom";
 import { Page, Section, linkCls } from "../components/ui";
 import { adherence, dateKey, formatRelative, formatTime12, isTaken, joinNames, nowMinutes, slotsOn, toMinutes } from "../data/schedule";
@@ -565,6 +566,15 @@ export default function RemindersPage() {
     }
   }
 
+  async function handleRefill(reminder) {
+    try {
+      const updated = await requestRefill(reminder._id);
+      setReminders((prev) => prev.map((r) => (r._id === updated._id || r._id === reminder._id ? { ...r, ...updated, refillRequestedAt: new Date().toISOString() } : r)));
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to order refill");
+    }
+  }
+
   return (
     <Page title="Medication reminders" sub="Set and manage medication schedules per patient.">
       <form onSubmit={handleSearch} className="flex flex-wrap items-center gap-x-6 gap-y-3 pb-4 border-b border-line text-[13px]">
@@ -598,7 +608,7 @@ export default function RemindersPage() {
           <NextDose reminders={reminders} onTaken={handleMarkTaken} />
           <TodayTimeline reminders={reminders} />
           <div className="grid gap-10 lg:grid-cols-2 items-start">
-            <Schedules reminders={reminders} onToggle={handleToggle} onDelete={handleDelete} />
+            <Schedules reminders={reminders} onToggle={handleToggle} onDelete={handleDelete} onRefill={handleRefill} />
             <WeekGrid reminders={reminders} />
           </div>
           <div id="add-medication" className="grid gap-10 lg:grid-cols-3 items-start pt-4">
@@ -683,7 +693,7 @@ function TodayTimeline({ reminders }) {
 }
 
 // ── Schedules ─────────────────────────────────────────────────────────────────
-function Schedules({ reminders, onToggle, onDelete }) {
+function Schedules({ reminders, onToggle, onDelete, onRefill }) {
   const rows = [...reminders].sort((a, b) => Number(b.active) - Number(a.active));
   return (
     <Section title="Schedules" aside={<span className="eyebrow">Times</span>}>
@@ -701,6 +711,14 @@ function Schedules({ reminders, onToggle, onDelete }) {
               {[FREQ_LABELS[r.frequency] ?? r.frequency, r.frequency === "weekly" && r.days?.join(", "), r.notes].filter(Boolean).join(" · ")}
             </span>
             <span className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => onRefill(r)}
+                disabled={Boolean(r.refillRequestedAt)}
+                className="text-emerald-700 underline underline-offset-2 hover:text-ink disabled:opacity-50"
+              >
+                {r.refillRequestedAt ? "Refill requested" : "Order refill"}
+              </button>
               <button type="button" onClick={() => onToggle(r)} className="text-blue-600 underline underline-offset-2 hover:text-ink">
                 {r.active ? "Pause" : "Resume"}
               </button>
