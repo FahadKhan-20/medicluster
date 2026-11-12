@@ -1267,31 +1267,51 @@
                 <circle cx="2" cy="12" r="1.2"></circle><circle cx="6" cy="12" r="1.2"></circle>
               </svg>
               <span style="font-weight:700; font-size:14.5px">Agents</span>
-              <span style="margin-left:auto; color:#8e8e96; font-size:12.5px; font-weight:600">5</span>
+              <span style="margin-left:auto; color:#8e8e96; font-size:12.5px; font-weight:600">10</span>
               <svg id="caretAgents" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#8e8e96" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s">
                 <path d="m6 9 6 6 6-6"></path>
               </svg>
             </button>
             <div id="treeAgentsList" class="tree-items-list">
-              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
                 <span class="elbow-line" style="top:0; height:50%;"></span>
                 <span>Imaging Scan Loop</span>
               </a>
-              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
                 <span class="elbow-line" style="top:0; height:50%;"></span>
-                <span style="color:#8e8e96">Ambulance Dispatch</span>
+                <span>Clinical Alerts</span>
               </a>
-              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
                 <span class="elbow-line" style="top:0; height:50%;"></span>
-                <span style="color:#8e8e96">Brain Radar</span>
+                <span>Medication Reminders</span>
               </a>
-              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
                 <span class="elbow-line" style="top:0; height:50%;"></span>
-                <span style="color:#8e8e96">Self-Heal Engine</span>
+                <span>Deterioration Radar</span>
               </a>
-              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span>Sepsis Watch</span>
+              </a>
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span>ECG Interpretation</span>
+              </a>
+              <a href="/codeblue" class="tree-item-link">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span>Code Blue War Room</span>
+              </a>
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span>Ambulance Dispatch</span>
+              </a>
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span>Self-Heal Engine</span>
+              </a>
+              <a href="#" onclick="App.setView('agents')" class="tree-item-link">
                 <span class="elbow-line" style="top:0; height:50%; border-left-color:#c9c9cf; border-bottom-color:#c9c9cf;"></span>
-                <span style="color:#8e8e96">Spec Builder</span>
+                <span>Spec Builder</span>
               </a>
             </div>
           </div>
@@ -1701,6 +1721,7 @@
         this.updateKeyStatusUI();
         this.fetchHealth();
         if (this.adminKey) this.fetchAudits();
+        else { this.openAuthModal(); this.showToast && this.showToast('Locked: enter the admin key to see the agent\'s decisions'); }
         this.startPolling();
         this.setupEvents();
       },
