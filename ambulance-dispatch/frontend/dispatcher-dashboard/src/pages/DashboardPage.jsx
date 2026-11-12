@@ -5,8 +5,9 @@ import { Close, CheckCircle } from '@mui/icons-material';
 import DispatchMap from '../components/DispatchMap';
 import IncidentQueue from '../components/IncidentQueue';
 import { FILTERS } from '../components/incidentFilters';
-import StatsCards from '../components/StatsCards';
 import UnitsPanel from '../components/UnitsPanel';
+import PanelRail, { PanelCloseButton } from '../components/PanelRail';
+import { dashboardColumns, readPanels, savePanels } from '../services/dashboardLayout';
 import AIInsightsView from '../components/AIInsightsView';
 import AssignmentWizard from '../components/AssignmentWizard';
 import SOSAlertModal from '../components/SOSAlertModal';
@@ -105,6 +106,9 @@ export default function DashboardPage({ user, onLogout }) {
   const { stats } = useDashboardStats();
 
 
+  const [panels, setPanels] = useState(() => readPanels(typeof localStorage === 'undefined' ? null : localStorage));
+  useEffect(() => { savePanels(typeof localStorage === 'undefined' ? null : localStorage, panels); }, [panels]);
+  const setSide = (side, open) => setPanels(p => ({ ...p, [side]: open }));
   const [selectedIncident, setSelectedIncident]     = useState(null);
   const [activeAssignment, setActiveAssignment]     = useState(null);
   const [focusAmbulance, setFocusAmbulance]         = useState(null);
@@ -267,7 +271,7 @@ export default function DashboardPage({ user, onLogout }) {
     <Box sx={{ display:'flex', flexDirection:'column', height:'100vh', width:'100%', background:T.bg, color:T.tx, overflow:'hidden', p:{ xs:'8px', md:'16px' }, gap:'14px' }}>
 
       {/* ══ HEADER ══ */}
-      <Box component="header" sx={{ height:{ xs:112, sm:64 }, flexWrap:{ xs:'wrap', sm:'nowrap' }, py:{ xs:'10px', sm:0 }, borderRadius:'24px', background:T.panel, flexShrink:0, display:'flex', alignItems:'center', gap:{ xs:'8px', sm:'16px' }, px:{ xs:'16px', md:'32px' }, border:`1px solid ${T.bd}` }}>
+      <Box component="header" sx={{ height:{ xs:112, sm:64 }, flexWrap:{ xs:'wrap', sm:'nowrap' }, py:{ xs:'10px', sm:0 }, borderRadius:'24px', background:'transparent', flexShrink:0, display:'flex', alignItems:'center', gap:{ xs:'8px', sm:'16px' }, px:{ xs:'16px', md:'32px' } }}>
         <Box sx={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0 }}>
           <Logo />
           <Typography sx={{ fontFamily:SERIF, fontWeight:600, fontSize:22, letterSpacing:'-0.01em' }}>MediCluster</Typography>
@@ -333,11 +337,6 @@ export default function DashboardPage({ user, onLogout }) {
       )}
 
       {view === 'ops' && <>
-      {/* ══ KPI STRIP ══ */}
-      <Box sx={{ flexShrink:0, px:{ xs:0, md:0 }, py:0 }}>
-        <StatsCards stats={stats} incidents={incidents} ambulances={fleet} />
-      </Box>
-
       <Box sx={{ display:{ xs:'block', lg:'none' } }}>
         <Segmented label="Workspace panel" fullWidth value={mobilePanel} onChange={setMobilePanel}
           items={[{key:'incidents',label:`Incidents · ${activeCount}`},{key:'map',label:'Live map'},{key:'units',label:'Units & radio'}]} />
@@ -346,16 +345,20 @@ export default function DashboardPage({ user, onLogout }) {
       <Box sx={{
         flex:1, minHeight:0, overflow:'hidden',
         display:'grid', gap:'16px', p:0,
-        gridTemplateRows:'minmax(0,1fr)', gridTemplateColumns:{ xs:'minmax(0,1fr)', lg:'300px minmax(0,1fr) 310px', xl:'330px minmax(0,1fr) 330px' },
+        gridTemplateRows:'minmax(0,1fr)', gridTemplateColumns:{ xs:'minmax(0,1fr)', ...dashboardColumns(panels) },
+        transition:'grid-template-columns 0.25s ease', '@media (prefers-reduced-motion: reduce)': { transition:'none' },
       }}>
 
         {/* ── Incidents ── */}
-        <Box component="section" aria-label="Incidents" sx={{ display:{ xs:mobilePanel === 'incidents' ? 'flex' : 'none', lg:'flex' }, flexDirection:'column', gap:'12px', minHeight:0, minWidth:0, p:'18px', background:T.panel, border:`1px solid ${T.bd}`, borderRadius:'24px' }}>
+        <Box component="section" aria-label="Incidents" sx={{ display:{ xs:mobilePanel === 'incidents' ? 'flex' : 'none', lg:panels.left ? 'flex' : 'none' }, flexDirection:'column', gap:'12px', minHeight:0, minWidth:0, p:'18px', background:'transparent', borderRadius:'24px' }}>
           <Box sx={sectionHead}>
             <Typography sx={{ fontSize:13.5, fontWeight:600 }}>
               Incidents <Box component="span" sx={{ color:T.tx3, fontWeight:400 }}>{activeCount}</Box>
             </Typography>
-            <Button onClick={() => setSosModalOpen(true)} sx={{ ...btnSx(true), height:30, px:'10px', fontSize:13 }}>+ New incident</Button>
+            <Box sx={{ display:'flex', alignItems:'center', gap:'6px' }}>
+              <Button onClick={() => setSosModalOpen(true)} sx={{ ...btnSx(true), height:30, px:'10px', fontSize:13 }}>+ New incident</Button>
+              <PanelCloseButton side="left" label="Incidents" onClose={() => setSide('left', false)} />
+            </Box>
           </Box>
           <Segmented label="Incident filter" fullWidth value={filter} onChange={setFilter}
             items={FILTERS.map(f => ({ key:f.key, label:f.label }))} />
@@ -363,6 +366,8 @@ export default function DashboardPage({ user, onLogout }) {
             <IncidentQueue incidents={incidents} onSelect={handleIncidentSelect} selectedId={sel?.id} filter={filter} />
           </Box>
         </Box>
+
+        {!panels.left && <PanelRail side="left" label="Incidents" count={activeCount} onOpen={() => setSide('left', true)} />}
 
         {/* ── Map + selected incident ── */}
         <Box sx={{ display:{ xs:mobilePanel === 'map' ? 'flex' : 'none', lg:'flex' }, flexDirection:'column', gap:'14px', minHeight:0, minWidth:0 }}>
@@ -398,11 +403,9 @@ export default function DashboardPage({ user, onLogout }) {
             </Box>
           </Box>
 
-          {/* Selected incident */}
-          <Box component="section" aria-label="Selected incident" sx={{ flexShrink:0, p:'16px 18px', maxHeight:'45%', overflow:'auto', borderRadius:'24px', background:T.panel, border:`1px solid ${T.bd}` }}>
-            {!sel ? (
-              <Typography sx={{ fontSize:13.5, color:T.tx3 }}>Select an incident to see details and dispatch a unit.</Typography>
-            ) : (
+          {/* Selected incident (only when one is selected, so the map gets the space) */}
+          {sel && (
+          <Box component="section" aria-label="Selected incident" sx={{ flexShrink:0, p:'16px 18px', maxHeight:'45%', overflow:'auto', borderRadius:'24px', background:'transparent' }}>
               <Box sx={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                 <Box sx={{ display:'flex', alignItems:'center', gap:'10px' }}>
                   <Typography sx={{ fontFamily:MONO, fontSize:12, color:T.tx3 }}>{sel.id}</Typography>
@@ -458,15 +461,16 @@ export default function DashboardPage({ user, onLogout }) {
                   </Button>
                 </Box>
               </Box>
-            )}
           </Box>
+          )}
         </Box>
 
         {/* ── Units + radio ── */}
-        <Box sx={{ display:{ xs:mobilePanel === 'units' ? 'flex' : 'none', lg:'flex' }, flexDirection:'column', gap:'16px', minHeight:0, minWidth:0, overflow:'auto' }}>
-          <UnitsPanel ambulances={fleet} onSelect={(amb) => setFocusAmbulance({ ...amb, _ts: Date.now() })} />
+        <Box sx={{ display:{ xs:mobilePanel === 'units' ? 'flex' : 'none', lg:panels.right ? 'flex' : 'none' }, flexDirection:'column', gap:'16px', minHeight:0, minWidth:0, overflow:'auto' }}>
+          <UnitsPanel ambulances={fleet} onSelect={(amb) => setFocusAmbulance({ ...amb, _ts: Date.now() })} onCollapse={() => setSide('right', false)} />
           <QuickCommsPanel ambulances={fleet} />
         </Box>
+        {!panels.right && <PanelRail side="right" label="Units & radio" count={fleet.filter(a => a.status === 'AVAILABLE').length} onOpen={() => setSide('right', true)} />}
       </Box>
 
       </>}

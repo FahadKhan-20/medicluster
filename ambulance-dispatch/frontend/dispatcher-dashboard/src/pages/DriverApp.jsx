@@ -8,6 +8,9 @@ import { dispatchBroadcast, DISPATCH_EVENTS } from '../services/dispatchBroadcas
 import { EMPLOYEE_KEY, SHIFT_KEY, VEHICLE_KEY, clearDriverShift } from '../services/driverSession';
 import MobileFrame from '../components/MobileFrame';
 import { mobileVars } from '../theme/mobile';
+import { ambulancesApi } from '../services/api';
+import { createCrewLocationPublisher, resolveCrewVehicle } from '../services/crewLocation';
+import { createAssignmentWatcher } from '../services/crewAssignment';
 
 const MONO = "'IBM Plex Mono', monospace";
 const SERIF = "'Newsreader', Georgia, serif";
@@ -128,13 +131,13 @@ function Incoming({ call, seconds, onAccept, onDecline }) {
 export default function DriverApp() {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
-  const { ambulances } = useAmbulances();
+  const { ambulances, refetch:refreshAmbulances } = useAmbulances();
   const { hospitals } = useHospitals();
 
   const employeeId = localStorage.getItem(EMPLOYEE_KEY) || profile?.full_name || 'Crew';
-  const vehicleId = localStorage.getItem(VEHICLE_KEY);
+  const unit = resolveCrewVehicle({profile,ambulances,deviceVehicleId:localStorage.getItem(VEHICLE_KEY)}) || {};
+  const vehicleId = unit.id;
   const [shiftStart] = useState(() => Number(localStorage.getItem(SHIFT_KEY)) || Date.now());
-  const unit = ambulances.find((a) => a.id === vehicleId) || ambulances[0] || {};
 
   const [tab, setTab] = useState('duty');                  // duty | radio | shift
   const [night, setNight] = useState(() => localStorage.getItem(NIGHT_KEY) === '1');
@@ -159,34 +162,46 @@ export default function DriverApp() {
   // Latest state for the dispatch listener, which is subscribed once.
   useEffect(() => { stateRef.current = { avail, mission, incoming }; }, [avail, mission, incoming]);
 
-  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
+  useEffect(() => {
+    const id = setInterval(() => { setNow(Date.now());refreshAmbulances(); }, 30_000);
+    const visible=()=>{if(!document.hidden)refreshAmbulances();};
+    window.addEventListener('focus',refreshAmbulances);document.addEventListener('visibilitychange',visible);
+    return () => {clearInterval(id);window.removeEventListener('focus',refreshAmbulances);document.removeEventListener('visibilitychange',visible);};
+  }, [refreshAmbulances]);
   useEffect(() => { localStorage.setItem(NIGHT_KEY, night ? '1' : '0'); }, [night]);
 
   // Live GPS while on shift.
   useEffect(() => {
-    if (!navigator.geolocation) return undefined;
+    if (!navigator.geolocation) { setGps('off'); return undefined; }
+    if (!vehicleId || unit.id !== vehicleId) { setGps('waiting'); return undefined; }
+    const publisher=createCrewLocationPublisher({vehicleId,onStatus:setGps,
+      send:(id,fix,signal)=>ambulancesApi.updateLocation(id,fix.latitude,fix.longitude,{recordedAt:fix.recordedAt,signal})});
     const id = navigator.geolocation.watchPosition(
-      (p) => { setPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setGps('live'); },
+      (p) => { if(publisher.push(p))setPos({ lat: p.coords.latitude, lng: p.coords.longitude }); },
       () => setGps('off'),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
     );
-    return () => navigator.geolocation.clearWatch(id);
-  }, []);
+    return () => { navigator.geolocation.clearWatch(id); publisher.stop(); };
+  }, [vehicleId, unit.id, profile?.id]);
   const here = useMemo(
     () => pos || (unit.latitude != null ? { lat: unit.latitude, lng: unit.longitude } : null),
     [pos, unit.latitude, unit.longitude],
   );
 
   // New calls from dispatch ring this phone when the crew is available and free.
+  // Returns false when the call can't be shown yet.
+  const ringRef = useRef(() => false);
   useEffect(() => {
     const ring = (inc) => {
       const { avail: a, mission: m, incoming: i } = stateRef.current;
-      if (!inc?.id || !inc.incident_type || !a || m || i) return;
-      if (inc._isAssignment && inc.ambulance?.id && vehicleId && inc.ambulance.id !== vehicleId) return; // assigned to another unit
+      if (!inc?.id || !inc.incident_type || !a || m || i) return false;
+      if (inc._isAssignment && inc.ambulance?.id && vehicleId && inc.ambulance.id !== vehicleId) return false; // assigned to another unit
       const to = { lat: Number(inc.location_lat), lng: Number(inc.location_lng) };
       setIncoming({ call: { ...inc, to, distanceKm: km(here, to) }, seconds: RESPOND_SECONDS });
       if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]);
+      return true;
     };
+    ringRef.current = ring;
     dispatchBroadcast.on(DISPATCH_EVENTS.INCIDENT_ASSIGNED, ring);
     dispatchBroadcast.on(DISPATCH_EVENTS.SOS_CREATED, ring);
     return () => {
@@ -194,6 +209,29 @@ export default function DriverApp() {
       dispatchBroadcast.off(DISPATCH_EVENTS.SOS_CREATED, ring);
     };
   }, [vehicleId, here]);
+
+  // Assignments saved in the database reach this crew on any device: the
+  // ambulance row's assigned_incident_id arrives via realtime or the periodic refresh.
+  const assignmentWatcher = useRef(null);
+  useEffect(() => {
+    const watcher = createAssignmentWatcher({
+      fetchIncident: async (id) => {
+        const { data, error } = await supabase.from('incidents').select('*').eq('id', id).maybeSingle();
+        if (error) throw error;
+        return data;
+      },
+      onCall: (inc) => ringRef.current(inc),
+    });
+    assignmentWatcher.current = watcher;
+    return () => watcher.stop();
+  }, []);
+  useEffect(() => {
+    assignmentWatcher.current?.update({
+      vehicleId,
+      assignedIncidentId: unit.assigned_incident_id || null,
+      activeIncidentId: mission?.id || incoming?.call?.id || null,
+    });
+  }, [vehicleId, unit.assigned_incident_id, mission?.id, incoming?.call?.id, avail]);
 
   // Response countdown.
   useEffect(() => {
@@ -317,7 +355,7 @@ export default function DriverApp() {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
           <Box component="span" sx={{ fontWeight: 600, fontSize: 15 }}>{unit.call_sign || vehicleId} · {unit.type || 'ALS'}</Box>
           <Box component="span" sx={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.06em', color: gps === 'live' ? 'var(--g-t)' : 'var(--tx3)' }}>
-            ● GPS {gps === 'live' ? 'LIVE' : gps === 'off' ? 'OFF' : '…'} · {unit.vehicle_number || ''}
+            ● GPS {gps === 'live' ? 'LIVE' : gps === 'off' ? 'OFF' : gps === 'sync-error' ? 'SYNC FAILED' : gps === 'waiting' ? 'WAITING' : 'SYNCING'} · {unit.vehicle_number || ''}
           </Box>
         </Box>
         <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', height: 28, px: '10px', borderRadius: '2px', background: `var(--${tone}-s)`,

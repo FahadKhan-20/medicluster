@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import supabase from '../services/supabase';
 import { analyticsApi } from '../services/api';
 import { dispatchBroadcast, DISPATCH_EVENTS } from '../services/dispatchBroadcast';
@@ -69,8 +69,11 @@ export function useAmbulances() {
   const [ambulances, setAmbulances] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const ambulanceRows=useRef(ambulances);ambulanceRows.current=ambulances;
+  const fetchVersion=useRef(0);
 
   const fetchAmbulances = useCallback(async () => {
+    const version=++fetchVersion.current;
     setLoading(true);
     try {
       const { data, error: sbErr } = await supabase
@@ -78,15 +81,16 @@ export function useAmbulances() {
         .select('*')
         .order('call_sign', { ascending: true });
 
+      if(version!==fetchVersion.current)return;
       if (sbErr) throw sbErr;
       if (Array.isArray(data)) {
         setAmbulances(data);
       }
       setError(null);
     } catch (e) {
-      setError(e.message);
+      if(version===fetchVersion.current)setError(e.message);
     } finally {
-      setLoading(false);
+      if(version===fetchVersion.current)setLoading(false);
     }
   }, []);
 
@@ -97,9 +101,16 @@ export function useAmbulances() {
     const channel = supabase
       .channel('cad_ambulances_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ambulances' }, (payload) => {
+        // Assignment changes can make rows appear/disappear under driver RLS.
+        // Re-read the authoritative visible set rather than retaining an old login assignment.
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-          setAmbulances(prev => prev.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a));
+          const previous=ambulanceRows.current.find(a=>a.id===payload.new.id);
+          setAmbulances(prev => prev.some(a=>a.id===payload.new.id)
+            ?prev.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a)
+            :[...prev,payload.new]);
+          if(!previous||previous.assigned_driver_id!==payload.new.assigned_driver_id)fetchAmbulances();
         }
+        if(payload.eventType==='DELETE')fetchAmbulances();
       })
       // Supabase Ephemeral Broadcast for High-Frequency GPS
       .on('broadcast', { event: 'ambulance_location' }, (payload) => {

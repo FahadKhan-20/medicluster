@@ -1,3 +1,4 @@
+import { PrivateImage } from "../components/PrivateMedia";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   analyzePatientMedia, deletePatientMedia, getMediaFileUrl,
@@ -387,7 +388,7 @@ export default function ImagingPage() {
               </>
             ) : (
               <>
-                <img key={current.gridfs_id} src={previewUrl(current)} alt={current.original_name} onError={()=>setPreviewError(true)} className="absolute inset-0 w-full h-full object-contain" />
+                <PrivateImage key={current.gridfs_id} source={previewUrl(current)} alt={current.original_name} onError={()=>setPreviewError(true)} className="absolute inset-0 w-full h-full object-contain" />
                 {previewError && <span role="alert" className="relative text-xs text-orange-200 bg-[#0e0f11] p-3">Image preview unavailable. Reload the study after the image service is available.</span>}
                 {findings && isDetector && showRegions && !previewError && <ImagingDetectionOverlay localization={visibleAnalysis.localization} highlight={highlight} onHighlight={setHighlight}/> }
                 {!isDetector && findings && heat?.url && (
@@ -407,7 +408,7 @@ export default function ImagingPage() {
               return (
                 <button key={img.gridfs_id} type="button" onClick={() => selectImage(img)} aria-pressed={on}
                   className={`relative w-24 h-[72px] bg-[#0e0f11] rounded-sm overflow-hidden ${on ? "outline outline-2 outline-ink outline-offset-1" : ""}`}>
-                  {<img src={previewUrl(img)} alt="" className="w-full h-full object-cover opacity-80" />}
+                  {<PrivateImage source={previewUrl(img)} alt="" className="w-full h-full object-cover opacity-80" />}
                   <span className="absolute bottom-1 left-1 right-1 font-mono text-[10px] text-[#c9c6bf] truncate text-left">{img.original_name}</span>
                 </button>
               );

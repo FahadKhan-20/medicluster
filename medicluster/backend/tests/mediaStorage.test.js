@@ -139,7 +139,8 @@ test('media routes retain API IDs, stream bytes and keep metadata when storage d
   await new Promise(resolve => server.once('listening', resolve));
   t.after(() => { server.closeAllConnections(); server.close(); });
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const fetchApp = global.fetch;
+  const originalFetch = global.fetch;
+  const fetchApp = require('./helpers/authenticatedFetch')(t, originalFetch);
   const storageRequests = [];
   let deleteFails = true;
   let deleteMissing = false;
@@ -152,7 +153,7 @@ test('media routes retain API IDs, stream bytes and keep metadata when storage d
     if (options.method === 'DELETE' && deleteMissing) return Response.json({ statusCode: '404', message: 'secret' }, { status: 404 });
     return Response.json({ message: 'success' });
   };
-  t.after(() => { global.fetch = fetchApp; });
+  t.after(() => { global.fetch = originalFetch; });
   const form = new FormData();
   form.set('patient_id', 'patient-123');
   form.set('file', new Blob([bytes], { type: 'application/pdf' }), 'Patient Name report.pdf');

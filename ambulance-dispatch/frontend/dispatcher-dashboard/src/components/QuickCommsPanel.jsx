@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Box, Typography, Button } from '@mui/material';
 
-import { T, MONO, monoLabelSx, btnSx } from '../theme/dispatchTokens';
+import { T, MONO, btnSx } from '../theme/dispatchTokens';
 
 const PRESETS = [
+  { label:'Request backup',            category:'critical',text:'URGENT: Requesting backup at current location. Additional unit needed immediately.' },
   { label:'All units: Stand by',        category:'ops',    text:'All units: Stand by for further instructions.' },
   { label:'Avoid NH44 — heavy traffic', category:'route',  text:'All units: Avoid NH44 due to heavy traffic. Use alternate route via Ring Road.' },
   { label:'Code 3 — lights & sirens',   category:'ops',    text:'Alpha-1: Proceed Code 3, lights and sirens authorised.' },
@@ -11,7 +12,6 @@ const PRESETS = [
   { label:'Confirm ETA',               category:'info',   text:'Unit: Please confirm your ETA to scene.' },
   { label:'Scene secured',             category:'info',   text:'All units: Scene secured by police. Safe to approach.' },
   { label:'Hospital on standby',       category:'hospital',text:'Alpha-1: AIIMS ER on standby — trauma team activated.' },
-  { label:'Request backup',            category:'critical',text:'URGENT: Requesting backup at current location. Additional unit needed immediately.' },
 ];
 
 export default function QuickCommsPanel({ ambulances = [] }) {
@@ -63,7 +63,7 @@ export default function QuickCommsPanel({ ambulances = [] }) {
   const metaSx = { fontFamily: MONO, fontSize: 10.5, color: T.tx3, mt: '4px' };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 400, flex: 1, p:'18px', borderRadius:'24px', background:T.panel, border:`1px solid ${T.bd}` }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 400, flex: 1, p:'18px', borderRadius:'24px', background:'transparent' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', pb: '8px', borderBottom: `1px solid ${T.bd}` }}>
         <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>Radio</Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '6px', fontFamily: MONO, fontSize: 11, color: T.gT }}>
@@ -88,28 +88,31 @@ export default function QuickCommsPanel({ ambulances = [] }) {
         })}
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Typography component="label" htmlFor="radio-unit" sx={monoLabelSx}>To</Typography>
-          <Box component="select" id="radio-unit" value={unit} onChange={e => setUnit(e.target.value)}
-            sx={{ flex: 1, height: 32, px: '8px', border: `1px solid ${T.bd2}`, borderRadius: '999px', background: T.sf, color: T.tx, font: 'inherit', fontSize: 13 }}>
-            {units.map(u => <option key={u}>{u}</option>)}
-          </Box>
-        </Box>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0, pt: '10px', borderTop: `1px solid ${T.bd}` }}>
+        {/* Quick messages: one line, scrolls sideways. */}
+        <Box role="group" aria-label="Quick messages" sx={{
+          display: 'flex', gap: '6px', overflowX: 'auto', pb: '2px', scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },
+          maskImage: 'linear-gradient(90deg, #000 88%, transparent)',
+        }}>
           {PRESETS.map(p => (
             <Button key={p.label} disabled={sending} onClick={() => send(p.text)}
-              sx={{ ...btnSx(false), height: 32, px: '10px', fontSize: 12.5,
+              sx={{ ...btnSx(false), flexShrink: 0, height: 28, px: '10px', fontSize: 12, whiteSpace: 'nowrap',
                 ...(p.category === 'critical' && { borderColor: T.r, color: T.rT }) }}>
               {p.label}
             </Button>
           ))}
         </Box>
-        <Box component="form" onSubmit={e => { e.preventDefault(); send(custom); }} sx={{ display: 'flex', gap: '6px' }}>
+        <Box component="form" onSubmit={e => { e.preventDefault(); send(custom); }}
+          sx={{ display: 'flex', alignItems: 'center', gap: '6px', p: '4px', border: `1px solid ${T.bd2}`, borderRadius: '999px', background: T.sf,
+            '&:focus-within': { borderColor: T.tx } }}>
+          <Box component="select" id="radio-unit" value={unit} onChange={e => setUnit(e.target.value)} aria-label="Send to"
+            sx={{ flexShrink: 0, maxWidth: 104, height: 30, px: '8px', border: 0, borderRadius: '999px', background: T.sf2, color: T.tx, font: 'inherit', fontSize: 12, cursor: 'pointer' }}>
+            {units.map(u => <option key={u}>{u}</option>)}
+          </Box>
           <Box component="input" value={custom} onChange={e => setCustom(e.target.value)}
             placeholder="Message" aria-label={`Message to ${unit}`}
-            sx={{ flex: 1, minWidth: 0, height: 36, px: '10px', border: `1px solid ${T.bd2}`, borderRadius: '999px', background: T.sf, color: T.tx, font: 'inherit', fontSize: 13, outline: 'none', '&:focus': { borderColor: T.tx } }} />
-          <Button type="submit" disabled={sending || !custom.trim()} sx={{ ...btnSx(true), height: 36 }}>
+            sx={{ flex: 1, minWidth: 0, height: 30, px: '4px', border: 0, background: 'transparent', color: T.tx, font: 'inherit', fontSize: 13, outline: 'none' }} />
+          <Button type="submit" disabled={sending || !custom.trim()} sx={{ ...btnSx(true), flexShrink: 0, height: 30, minWidth: 0, px: '14px' }}>
             {sending ? 'Sending…' : 'Send'}
           </Button>
         </Box>

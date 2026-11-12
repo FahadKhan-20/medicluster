@@ -8,7 +8,7 @@ const path = require("path");
 const PatientMedia = require("../models/PatientMedia");
 const SystemConfig = require("../models/SystemConfig");
 const brainMri = require("../services/brainMri");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requirePatientOrClinician, canAccessPatient } = require("../middleware/auth");
 const {
   chatText,
   chatVision,
@@ -22,6 +22,28 @@ const IMAGING_ENGINE_URL = process.env.CHEST_IMAGING_URL || ML_ENGINE_URL;
 const { DETECTOR_ID, validateLocalization } = require("../services/chestLocalization");
 
 const router = express.Router();
+
+// Public model metadata and the legacy text-only conversation grant no record access.
+// Every file/list/analysis route still needs its own verified app session.
+router.use((req, res, next) => {
+  if ((req.method === 'GET' && req.path === '/models') || (req.method === 'POST' && req.path === '/ai-chat')) return next();
+  res.set('Cache-Control', 'private, no-store');
+  requirePatientOrClinician(req, res, async (error) => {
+    if (error) return next(error);
+    if (req.session.kind === 'clinician') return next();
+    try {
+      if (req.method !== 'GET') return res.status(403).json({ error: 'Clinician access required for imaging operations' });
+      const file = req.path.match(/^\/(?:file|preview)\/([a-fA-F0-9]{24})$/);
+      if (file) {
+        const record = await PatientMedia.findOne({ gridfs_id: file[1].toLowerCase(), patient_id: req.session.patientId }).lean();
+        return record ? next() : res.status(404).json({ error: 'File not found' });
+      }
+      const listing = req.path.match(/^\/([A-Za-z0-9_-]{1,128})$/);
+      if (listing && canAccessPatient(req, listing[1])) return next();
+      return res.status(403).json({ error: 'Not your record' });
+    } catch (e) { return next(e); }
+  });
+});
 
 function getNearbyHospitals(city, disease) {
   return new Promise((resolve) => {
@@ -44,10 +66,9 @@ function getNearbyHospitals(city, disease) {
 
 async function enrichReplyWithHospitals(reply, location, options = {}) {
   const { isFollowUp = false, question = "" } = options;
-  // If it's an ongoing conversational turn and the user did not ask about hospitals/doctors,
-  // do not inject repetitive hospital boilerplate into the chat dialogue.
+  // Facility lookup adds another model call and a web search. Run it only on request.
   const askedForFacilities = /\b(hospital|clinic|doctor|specialist|where to go|nearby|consultation|emergency|center|facility)\b/i.test(question || "");
-  if (isFollowUp && !askedForFacilities) {
+  if (!askedForFacilities) {
     return reply;
   }
 
@@ -744,6 +765,8 @@ Provide a concise, direct, and supportive response (around 2 to 3 short paragrap
             }
           } catch (modelErr) {
             console.warn(`[CliniQ] OmniRoute model ${candidateModel} failed:`, modelErr.response?.data?.error?.message || modelErr.message);
+            // Changing model cannot recover a stopped proxy, bad credentials, or rate limit.
+            if (!modelErr.response || [401, 403, 429].includes(modelErr.response.status)) break;
           }
         }
       } catch (omniErr) {

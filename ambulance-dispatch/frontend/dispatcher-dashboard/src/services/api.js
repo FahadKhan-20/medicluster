@@ -31,7 +31,7 @@ export const ambulancesApi = {
   getById: (id) => api.get(`/ambulances/${id}`),
   getAvailable: (lat, lng, radius) => api.get('/ambulances/available', { params: { lat, lng, radius } }),
   updateStatus: (id, status) => api.patch(`/ambulances/${id}/status`, { status }),
-  updateLocation: (id, lat, lng) => api.patch(`/ambulances/${id}/location`, { latitude: lat, longitude: lng })
+  updateLocation: (id, lat, lng, options = {}) => api.patch(`/ambulances/${id}/location`, { latitude: lat, longitude: lng, ...(options.recordedAt ? {recordedAt:options.recordedAt} : {}) }, {signal:options.signal})
 };
 
 // Hospitals API

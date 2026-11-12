@@ -48,14 +48,15 @@ test('brain MRI integrates with patient media independently of chest X-ray runti
   app.use('/api/alerts', require('../routes/alertRoutes'));
   app.use((error, _req, res, _next) => res.status(error.status || 500).json({ error: error.message }));
   const origin = await listen(t, app);
-  const realFetch = global.fetch;
+  const originalFetch = global.fetch;
+  const realFetch = require('./helpers/authenticatedFetch')(t, originalFetch, actionToken);
   global.fetch = (url, options) => {
     if (new URL(url).pathname.startsWith('/storage/v1/')) {
       return Promise.resolve(options.method === 'GET' ? new Response(bytes) : Response.json({ message: 'success' }));
     }
     return realFetch(url, options);
   };
-  t.after(() => { global.fetch = realFetch; });
+  t.after(() => { global.fetch = originalFetch; });
 
   await t.test('lists MRI even when chest model discovery fails', async () => {
     const response = await realFetch(`${origin}/api/media/models`);
@@ -82,7 +83,7 @@ test('brain MRI integrates with patient media independently of chest X-ray runti
 
   await t.test('record and review actions require clinician sign-in', async () => {
     for (const name of ['record', 'review']) {
-      assert.equal((await realFetch(`${origin}/api/media/${name}/${media.gridfs_id}`, { method: 'POST' })).status, 401);
+      assert.equal((await originalFetch(`${origin}/api/media/${name}/${media.gridfs_id}`, { method: 'POST' })).status, 401);
     }
   });
 

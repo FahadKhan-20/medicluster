@@ -280,6 +280,14 @@ export async function aiChat(
   return res.data;
 }
 
+// Authenticated app assistant. The server derives role and patient identity from JWT.
+export async function cliniqChat(payload, signal) {
+  return (await api.post('/cliniq/chat', payload, { signal, timeout: 95_000 })).data;
+}
+export async function cliniqAction(id, decision, signal) {
+  return (await api.post(`/cliniq/actions/${encodeURIComponent(id)}`, { decision }, { signal, timeout: 125_000 })).data;
+}
+
 /**
  * List available AI models from the ML engine.
  */
