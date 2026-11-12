@@ -1,0 +1,12 @@
+threshold: 0.9
+groups:
+  imaging: auto
+  alerts: auto
+  reminders: auto
+  radar: auto
+  selfheal: auto
+  dispatch: suggest
+  builder: suggest
+  ecg: auto
+  sepsis: auto
+rate_limit_per_minute: 30

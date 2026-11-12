@@ -52,3 +52,7 @@ medicluster/intelligence-engine/.runtime/
 medicluster/ml-engine/.venv-imaging/
 medicluster/ml-engine/.models/
 medicluster/ml-engine/.runtime/
+medicluster/ml-engine/data/
+medicluster/ml-engine/models_store/
+*.joblib
+

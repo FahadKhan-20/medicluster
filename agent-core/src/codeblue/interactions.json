@@ -1,0 +1,68 @@
+{
+  "drugs": {
+    "amiodarone": {
+      "name": "Amiodarone",
+      "allergies": ["amiodarone", "iodine", "iodinated contrast"],
+      "contraindications": [
+        "severe sinus-node dysfunction without pacemaker",
+        "second- or third-degree AV block without pacemaker",
+        "known iodine hypersensitivity"
+      ],
+      "alternative": "Lidocaine 1.0–1.5 mg/kg IV/IO",
+      "interactions": [
+        {
+          "interacting_classes": ["qt-prolonging", "antiarrhythmics-class-ia-iii"],
+          "drugs": ["haloperidol", "ondansetron", "azithromycin", "sotalol", "procainamide", "quinidine", "ciprofloxacin", "methadone"],
+          "severity": "HIGH",
+          "effect": "Additive QT prolongation and increased risk of Torsades de Pointes. Monitor QTc closely upon ROSC."
+        },
+        {
+          "interacting_classes": ["cardiac-glycosides"],
+          "drugs": ["digoxin"],
+          "severity": "HIGH",
+          "effect": "Amiodarone increases serum digoxin concentrations by up to 100%, risk of digitalis toxicity/heart block."
+        },
+        {
+          "interacting_classes": ["anticoagulants"],
+          "drugs": ["warfarin"],
+          "severity": "MODERATE",
+          "effect": "Potentiates warfarin anticoagulant effect via CYP2C9 inhibition."
+        }
+      ]
+    },
+    "epinephrine": {
+      "name": "Epinephrine",
+      "allergies": ["epinephrine", "sulfite"],
+      "contraindications": [],
+      "alternative": "Vasopressin (historical / secondary)",
+      "interactions": [
+        {
+          "interacting_classes": ["beta-blockers-nonselective"],
+          "drugs": ["propranolol", "nadolol", "timolol", "labetalol", "carvedilol"],
+          "severity": "HIGH",
+          "effect": "Unopposed alpha-1 adrenergic stimulation leads to severe peripheral vasoconstriction and reflex bradycardia. Higher defibrillation threshold possible."
+        },
+        {
+          "interacting_classes": ["maois", "tcas"],
+          "drugs": ["phenelzine", "tranylcypromine", "selegiline", "amitriptyline", "nortriptyline"],
+          "severity": "HIGH",
+          "effect": "Inhibition of catecholamine breakdown or reuptake markedly potentiates cardiovascular response. Monitor for extreme adrenergic surge upon ROSC."
+        }
+      ]
+    },
+    "lidocaine": {
+      "name": "Lidocaine",
+      "allergies": ["lidocaine", "amide local anesthetics"],
+      "contraindications": ["severe sinoatrial block", "Stokes-Adams syndrome"],
+      "alternative": "Amiodarone 300 mg IV/IO",
+      "interactions": [
+        {
+          "interacting_classes": ["cyp1a2-inhibitors"],
+          "drugs": ["fluvoxamine", "ciprofloxacin", "amiodarone"],
+          "severity": "MODERATE",
+          "effect": "Decreased lidocaine clearance, risk of neurotoxicity."
+        }
+      ]
+    }
+  }
+}

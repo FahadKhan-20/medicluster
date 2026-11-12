@@ -990,6 +990,46 @@ def ask():
         return jsonify({"error": str(e)}), 500
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sepsis Scoring (PhysioNet 2019)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route("/sepsis/score", methods=["POST"])
+def sepsis_score_endpoint():
+    """
+    Score sepsis risk given chronological hourly snapshots.
+
+    Body: {
+        hours: [
+            { "HR": 80, "O2Sat": 98, "Temp": 37.0, "SBP": 120, "MAP": 82, "DBP": 70, "Resp": 16, ... }
+        ]
+    }
+    Returns: { "risk": float, "band": "low"|"medium"|"high", "top_factors": list[str], "model": "sepsis2019-hgb-v1" }
+    """
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "Invalid JSON body; expected object containing 'hours'"}), 400
+
+    hours = body.get("hours")
+    if hours is None:
+        return jsonify({"error": "Missing required field 'hours'"}), 400
+    if not isinstance(hours, list) or len(hours) == 0:
+        return jsonify({"error": "'hours' must be a non-empty list of hourly observations"}), 400
+
+    try:
+        from risk.sepsis_model import score_sepsis
+        result = score_sepsis(hours)
+        return jsonify(result), 200
+    except FileNotFoundError as e:
+        return jsonify({"error": f"Sepsis model unavailable: {str(e)}"}), 503
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to score sepsis risk: {str(e)}"}), 500
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────

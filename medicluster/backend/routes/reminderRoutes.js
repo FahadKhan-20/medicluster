@@ -6,10 +6,80 @@
 const express = require("express");
 const { isValidId } = require("../db/ids");
 const Reminder = require("../models/Reminder");
+const ReminderNotification = require("../models/ReminderNotification");
 
-const { requirePatientOrClinician, canAccessPatient } = require("../middleware/auth");
+const { requireAuth, requirePatientOrClinician, canAccessPatient } = require("../middleware/auth");
 
 const router = express.Router();
+
+// ── POST /api/reminders/:id/notify (or /notify) ── agent-core only ──────────
+const MAX_NOTIFY_MESSAGE = 2000;
+const MAX_ID = 128;
+const isText = (v, max) => typeof v === "string" && v.trim().length > 0 && v.length <= max;
+
+async function handleReminderNotify(req, res, next) {
+  try {
+    if (!req.agent) return res.status(403).json({ error: "Agent sign-in required" });
+    const reminderId = req.params.id || req.body?.reminder_id || req.body?.reminderId;
+    const { patient_id, patientId, date, time, message, audit_id, auditId, status } = req.body || {};
+    const effectivePatientId = patient_id || patientId;
+    const effectiveAuditId = audit_id || auditId || "";
+    const effectiveStatus = status || "sent";
+
+    if (!isText(reminderId, MAX_ID)) {
+      return res.status(400).json({ error: "reminderId is required" });
+    }
+    if (!isText(effectivePatientId, MAX_ID)) {
+      return res.status(400).json({ error: "patientId is required" });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
+      return res.status(400).json({ error: "date (YYYY-MM-DD) is required" });
+    }
+    if (!/^\d{2}:\d{2}$/.test(time ?? "")) {
+      return res.status(400).json({ error: "time (HH:MM) is required" });
+    }
+    if (!isText(message, MAX_NOTIFY_MESSAGE)) {
+      return res.status(400).json({ error: `message is required (max ${MAX_NOTIFY_MESSAGE} chars)` });
+    }
+
+    const reminder = await Reminder.findById(reminderId).lean();
+    if (!reminder) {
+      return res.status(404).json({ error: "Reminder not found" });
+    }
+
+    const existing = await ReminderNotification.findOne({ reminderId, date, time }).lean();
+    if (existing) {
+      const updated = await ReminderNotification.findByIdAndUpdate(
+        existing._id,
+        {
+          message,
+          auditId: effectiveAuditId,
+          status: effectiveStatus,
+          sentAt: new Date(),
+        },
+        { new: true }
+      ).lean();
+      return res.status(200).json(updated);
+    }
+
+    const created = await ReminderNotification.create({
+      reminderId,
+      patientId: effectivePatientId,
+      date,
+      time,
+      message,
+      auditId: effectiveAuditId,
+      status: effectiveStatus,
+      sentAt: new Date(),
+    });
+    return res.status(201).json(created.toObject ? created.toObject() : created);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+router.post("/notify", requireAuth, handleReminderNotify);
+router.post("/:id/notify", requireAuth, handleReminderNotify);
 
 // Clinicians may manage any patient's reminders; a signed-in patient only their own.
 router.use(requirePatientOrClinician);
