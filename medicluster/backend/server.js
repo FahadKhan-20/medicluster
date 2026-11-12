@@ -26,6 +26,7 @@ const authRoutes      = require("./routes/authRoutes");
 const alertRoutes     = require("./routes/alertRoutes");
 const patientAuthRoutes = require("./routes/patientAuthRoutes");
 const { pharmacyAuth, courierAuth } = require("./routes/pharmacyAuthRoutes");
+const { prescriptions, pharmacies } = require("./routes/prescriptionRoutes");
 const { requireAuth } = require("./middleware/auth");
 
 const app = express();
@@ -54,6 +55,8 @@ app.use("/api/pharmacy-auth", pharmacyAuth);
 app.use("/api/courier-auth", courierAuth);
 app.use("/api/sms-gateway", require('./routes/smsGatewayRoutes'));
 // Clinician-only data. Patient-app and dispatch endpoints stay unauthenticated.
+app.use("/api/prescriptions", requireAuth, prescriptions);
+app.use("/api/pharmacies",    requireAuth, pharmacies);
 app.use("/api/data",    requireAuth, dataRoutes);
 app.use("/api/cluster", requireAuth, clusterRoutes);
 app.use("/api/alerts",  requireAuth, alertRoutes);
