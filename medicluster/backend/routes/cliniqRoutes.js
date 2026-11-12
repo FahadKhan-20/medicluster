@@ -28,6 +28,7 @@ function createRouter(options={}){
   }
   router.get('/capabilities',(req,res)=>{const {tools}=services(req);res.json({role:req.session.kind,tools:tools.catalog(req.session).map(t=>({name:t.function.name,description:t.function.description}))});});
   router.post('/chat',async(req,res,next)=>{
+    const isStream = req.query.stream === '1';
     const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),90000);
     const close=()=>{if(!res.writableEnded)controller.abort();};res.on('close',close);
     try{
@@ -35,10 +36,42 @@ function createRouter(options={}){
       if(typeof requestId!=='string'||! /^[a-zA-Z0-9_-]{8,128}$/.test(requestId))throw fail(400,'Valid request ID required');
       if(typeof conversationId!=='string'||! /^[a-zA-Z0-9_-]{8,128}$/.test(conversationId))throw fail(400,'Valid conversation ID required');
       if(location!==undefined&&location!==null&&!validLocation(location))throw fail(400,'Invalid shared location');
+
+      if(isStream){
+        res.setHeader('Content-Type','text/event-stream');
+        res.setHeader('Cache-Control','no-cache, no-transform');
+        res.setHeader('Connection','keep-alive');
+        if(typeof res.flushHeaders==='function')res.flushHeaders();
+      }
+
+      const sendEvent=(event,data)=>{
+        if(isStream&&!res.writableEnded&&!res.destroyed){
+          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          if(typeof res.flush==='function')res.flush();
+        }
+      };
+
       const {agent}=services(req,controller.signal);
-      const result=await agent.chat(req.session,{question,history,language,images,selectedPatient},{requestId,conversationId,location,signal:controller.signal});
-      if(!res.destroyed)res.json({...result,role:req.session.kind});
-    }catch(e){next(e);}finally{clearTimeout(timer);res.off('close',close);}
+      const onEvent=eventData=>{
+        sendEvent(eventData.type||eventData.step||'tool',eventData);
+      };
+
+      const result=await agent.chat(req.session,{question,history,language,images,selectedPatient},{requestId,conversationId,location,signal:controller.signal,onEvent});
+      if(isStream){
+        const payload={...result,role:req.session.kind};
+        sendEvent('done',payload);
+        res.end();
+      }else{
+        if(!res.destroyed)res.json({...result,role:req.session.kind});
+      }
+    }catch(e){
+      if(isStream&&(res.headersSent||!res.writableEnded)){
+        res.write(`event: error\ndata: ${JSON.stringify({error:e.message||'Chat error',status:e.status||500})}\n\n`);
+        res.end();
+      }else{
+        next(e);
+      }
+    }finally{clearTimeout(timer);res.off('close',close);}
   });
   router.post('/actions/:id',async(req,res,next)=>{
     try{

@@ -11,6 +11,8 @@ const { normalizePatientRows } = require('../utils/rowSerializer');
 
 const patient = { kind:'patient', patientId:'AUDIT-P1' };
 const clinician = { kind:'clinician', userId:'audit-staff' };
+const dispatcher = { kind:'clinician', userId:'audit-dispatcher', role:'dispatcher' };
+const admin = { kind:'clinician', userId:'audit-admin', role:'admin' };
 const FILE = '111111111111111111111111';
 const STUDY = 'a'.repeat(32), OTHER = 'b'.repeat(32), SESSION = 'c'.repeat(32);
 const approved = { approved:true, operationId:'audit-operation-0001', location:{latitude:12,longitude:77} };
@@ -28,7 +30,8 @@ test('all CliniQ tool names, both role catalogs, and endpoint operation variants
   const tools = createTools({
     request:async(path,options)=>{calls.push({path,method:options.method,body:options.body,headers:options.headers});return responses.shift() ?? {fixture:true};},
     hospitals:async()=>({hospitals:[{name:'Synthetic Hospital',source:'Synthetic fixture'}]}),
-    recoverEmergency:async()=>({id:'fixture-repair',status:'ASSIGNED'})
+    recoverEmergency:async()=>({id:'fixture-repair',status:'ASSIGNED'}),
+    dispatchFetch:async(path,options)=>{calls.push({path,method:options.method||'GET',body:options.body});return responses.shift() ?? {fixture:true};}
   });
   const covered = new Set();
   let scenarios = 0;
@@ -116,7 +119,24 @@ test('all CliniQ tool names, both role catalogs, and endpoint operation variants
   await exercise(clinician,'appointment_status',{patientId:patient.patientId,appointmentId:FILE,status:'CONFIRMED'},[patch(`/api/patient-app/${patient.patientId}/appointments/${FILE}`,{status:'CONFIRMED'})]);
   await exercise(patient,'send_sos',{description:'Synthetic only'},[get(`/api/patient-app/${patient.patientId}/emergencies`),post(`/api/patient-app/${patient.patientId}/emergencies`,{...approved.location,description:'Synthetic only'})],[[],{id:'synthetic-sos',status:'PENDING'}]);
   await exercise(patient,'send_sos',{description:'Synthetic only'},[get(`/api/patient-app/${patient.patientId}/emergencies`)],[ [{id:'synthetic-active',status:'ASSIGNED'}] ],r=>assert.equal(r.reused,true));
-  const names=new Set([...tools.catalog(patient),...tools.catalog(clinician)].map(d=>d.function.name));
+  await exercise(clinician,'nearby_ambulances',{lat:12,lng:77},[{path:'/api/ambulances/available?lat=12&lng=77&radius=50',method:'GET',body:undefined}],[{ambulances:[{id:'amb-1',callSign:'Alpha-1',distance:3.5}]}],r=>assert.equal(r.count,1));
+  await exercise(clinician,'active_incidents',{},[{path:'/api/incidents',method:'GET',body:undefined}],[[{id:'inc-1',status:'DISPATCHED',severity:'HIGH'}]]);
+  await exercise(clinician,'incident_status',{incidentId:'inc-1'},[{path:'/api/incidents/inc-1',method:'GET',body:undefined},{path:'/api/incidents/inc-1/timeline',method:'GET',body:undefined}],[{id:'inc-1',status:'DISPATCHED'},[{event:'dispatched'}]]);
+  await exercise(patient,'my_emergency_status',{},[],[],r=>assert.equal(r.active,false));
+  await exercise(dispatcher,'dispatch_ambulance',{incidentId:'inc-1',ambulanceId:'amb-1'},[{path:'/api/assignments',method:'POST',body:{incident_id:'inc-1',ambulance_id:'amb-1',hospital_id:'HOSP-001'}}],[{success:true}]);
+  await exercise(clinician,'list_alerts',{filter:'all'},[get('/api/alerts')],[[{id:'alt-1',title:'High HR',severity:'critical',read:false}]]);
+  await exercise(clinician,'acknowledge_alert',{alertId:'alt-1'},[post('/api/alerts/ack',{ids:['alt-1']})],[{acknowledged:true}]);
+  await exercise(clinician,'ecg_records',{patientId:patient.patientId},[get(`/api/ecg?patient_id=${patient.patientId}`)],[{records:[{_id:'ecg-1',patient_id:patient.patientId,signal:[1,2,3],device:'12-lead ECG'}]}]);
+  await exercise(clinician,'interpret_ecg',{recordId:'ecg-1'},[get('/api/ecg/ecg-1'),post('/api/intelligence/ecg/analyze',{signal:[[1]],lead_order:undefined})],[{record:{patient_id:patient.patientId,signal:[[1]]}},{model:'PTB-XL ECGResNet1D',probabilities:{NORM:0.95}}]);
+  await exercise(clinician,'sepsis_risk',{patientId:patient.patientId},[get(`/api/ml/readings/${patient.patientId}`),post('/api/ml/sepsis/score',{hours:[{HR:75,SBP:120,DBP:80,Temp:37.0}]})],[[],{band:'low',risk:0.05,top_factors:[]}]);
+  await exercise(clinician,'start_code_blue',{patientId:patient.patientId},[post('/api/agent/codeblue/start',{patientId:patient.patientId,scenario:'vf'})],[{sessionId:'cb-1',status:'ACTIVE'}]);
+  await exercise(admin,'agent_status',{},[get('/api/agent/health')],[{status:'healthy'}]);
+  await exercise(admin,'agent_recent_decisions',{filter:'all',limit:10},[get('/api/agent/audit?limit=10')],[{audit:[{id:'aud-1'}]}]);
+  await exercise(admin,'explain_agent_decision',{auditId:'aud-1'},[get('/api/agent/audit/aud-1')],[{event:{type:'vitals_spike'},gateVerdict:'APPROVED',outcome:'ALERT_SENT'}],r=>assert.ok(r.plainSummary.includes('vitals_spike')));
+  await exercise(admin,'agent_stop',{reason:'Test'},[post('/api/agent/control/stop',{reason:'Test'})],[{stopped:true}]);
+  await exercise(admin,'agent_start',{},[post('/api/agent/control/start',{})],[{started:true}]);
+  await exercise(clinician,'imaging_findings_summary',{patientId:patient.patientId},[get(`/api/media/${patient.patientId}`)],[[{original_name:'scan.png',gridfs_id:FILE,analysis:{modality:'Chest X-ray',findings:[{label:'Normal',confidence:0.99}]}}]],r=>assert.ok(r.summary.includes('Normal')));
+  const names=new Set([...tools.catalog(patient),...tools.catalog(clinician),...tools.catalog(dispatcher),...tools.catalog(admin)].map(d=>d.function.name));
   assert.deepEqual([...covered].sort(),[...names].sort());
   t.diagnostic(`Covered ${covered.size} distinct tools, ${scenarios} role/operation scenarios; 13 advanced endpoint payload shapes.`);
 

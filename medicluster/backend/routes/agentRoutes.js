@@ -75,6 +75,59 @@ router.get("/audit", requireAuth, requireRole(["admin", "doctor"]), async (req, 
   }
 });
 
+// GET /api/agent/audit/:id -> AGENT_CORE_URL/audit/:id
+router.get("/audit/:id", requireAuth, requireRole(["admin", "doctor"]), async (req, res) => {
+  const url = `${getAgentCoreUrl()}/audit/${encodeURIComponent(req.params.id)}`;
+  const adminKey = getAdminKey();
+  try {
+    const headers = { Accept: "application/json" };
+    if (adminKey) headers["x-admin-key"] = adminKey;
+
+    const response = await fetch(url, { method: "GET", headers });
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+    const sanitized = sanitize(data, adminKey);
+    return res.status(response.status).json(sanitized);
+  } catch (_err) {
+    return res.status(503).json({ error: "Agent core service unavailable" });
+  }
+});
+
+// POST /api/agent/codeblue/start -> AGENT_CORE_URL/codeblue/start
+router.post("/codeblue/start", requireAuth, requireRole(["admin", "doctor"]), async (req, res) => {
+  const url = `${getAgentCoreUrl()}/codeblue/start`;
+  const adminKey = getAdminKey();
+  try {
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (adminKey) headers["x-admin-key"] = adminKey;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(req.body || {}),
+    });
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+    const sanitized = sanitize(data, adminKey);
+    return res.status(response.status).json(sanitized);
+  } catch (_err) {
+    return res.status(503).json({ error: "Agent core service unavailable" });
+  }
+});
+
 // POST /api/agent/control/:action(stop|start) -> AGENT_CORE_URL/control/:action
 router.post("/control/:action", requireAuth, requireRole(["admin"]), async (req, res) => {
   const { action } = req.params;
