@@ -43,7 +43,7 @@ async function main(): Promise<void> {
     baseUrl: dispatchUrl,
     token: () => signAgentToken(config.agentJwtSecret),
   });
-  const jev = new JevClient({ apiKey: config.openrouterKey, model: config.jevModel });
+  const jev = new JevClient({ apiKey: config.openrouterKey, fallbackKeys: config.openrouterFallbackKeys, model: config.jevModel });
   const llm = new OmniRouteProvider({ url: config.omnirouteUrl, apiKey: config.omnirouteKey, model: config.agentModel });
   const health = new HealthPoller({
     targets: {

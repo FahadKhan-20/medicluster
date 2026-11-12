@@ -10,6 +10,7 @@ export type Config = {
   omnirouteKey: string;
   agentModel: string;
   openrouterKey: string;
+  openrouterFallbackKeys: string[];
   jevModel: string;
   mlUrl: string;
   intelUrl: string;
@@ -56,6 +57,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     omnirouteKey: env.OMNIROUTE_API_KEY ?? "",
     agentModel: env.AGENT_MODEL || "agy/gemini-3.8-flash-medium",
     openrouterKey: env.OPENROUTER_API_KEY as string,
+    openrouterFallbackKeys: (env.OPENROUTER_FALLBACK_KEYS ?? "").split(",").map((k) => k.trim()).filter(Boolean),
     jevModel: env.JEV_MODEL || "typesafe/jev-1.13",
     mlUrl: env.ML_URL || "http://ml-engine:8000",
     intelUrl: env.INTEL_URL || "http://intelligence-engine:8090",

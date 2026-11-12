@@ -87,6 +87,8 @@ function validAnswer(a: unknown, q: Question): a is Answer {
 
 export interface JevOptions {
   apiKey: string;
+  /** Extra OpenRouter keys tried in order when a key is out of credit, unauthorized or rate-limited. */
+  fallbackKeys?: string[];
   model: string;
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
@@ -96,7 +98,8 @@ export interface JevOptions {
 }
 
 export class JevClient implements Decider {
-  private readonly apiKey: string;
+  private readonly keys: string[];
+  private keyIndex = 0;
   private readonly model: string;
   private readonly baseUrl: string;
   private readonly fetchFn: typeof globalThis.fetch;
@@ -105,7 +108,7 @@ export class JevClient implements Decider {
   private readonly timeoutMs: number;
 
   constructor(o: JevOptions) {
-    this.apiKey = o.apiKey;
+    this.keys = [...new Set([o.apiKey, ...(o.fallbackKeys ?? [])].map((k) => (k ?? "").trim()).filter(Boolean))];
     this.model = o.model;
     this.baseUrl = (o.baseUrl ?? "https://openrouter.ai/api").replace(/\/+$/, "");
     this.fetchFn = o.fetch ?? globalThis.fetch;
@@ -128,43 +131,56 @@ export class JevClient implements Decider {
           }),
         ),
       });
-      for (let attempt = 0; attempt <= this.retries; attempt++) {
-        let retryable = true;
-        try {
-          const resp = await this.fetchFn(url, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-            body,
-            signal: AbortSignal.timeout(this.timeoutMs),
-          });
-          if (resp.status === 200) {
-            const data = (await resp.json()) as { answers?: unknown; usage?: { cost?: number | null } };
-            if (!data || typeof data.answers !== "object" || data.answers === null) {
-              throw new Error("response missing answers");
-            }
-            const raw = data.answers as Record<string, Answer>;
-            const answers: Record<string, Answer> = {};
-            const invalid: string[] = [];
-            for (const [n, q] of Object.entries(questions)) {
-              const a = raw[n];
-              if (validAnswer(a, q)) answers[n] = a;
-              else {
-                answers[n] = fallbackAnswer(q);
-                invalid.push(n);
+      // Key rotation: on 401/402/403/429 move to the next key and keep it for later calls.
+      for (let k = 0; k < Math.max(this.keys.length, 1); k++) {
+        const idx = (this.keyIndex + k) % Math.max(this.keys.length, 1);
+        const key = this.keys[idx] ?? "";
+        let rotate = false;
+        for (let attempt = 0; attempt <= this.retries; attempt++) {
+          let retryable = true;
+          try {
+            const resp = await this.fetchFn(url, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+              body,
+              signal: AbortSignal.timeout(this.timeoutMs),
+            });
+            if (resp.status === 200) {
+              this.keyIndex = idx;
+              const data = (await resp.json()) as { answers?: unknown; usage?: { cost?: number | null } };
+              if (!data || typeof data.answers !== "object" || data.answers === null) {
+                throw new Error("response missing answers");
               }
+              const raw = data.answers as Record<string, Answer>;
+              const answers: Record<string, Answer> = {};
+              const invalid: string[] = [];
+              for (const [n, q] of Object.entries(questions)) {
+                const a = raw[n];
+                if (validAnswer(a, q)) answers[n] = a;
+                else {
+                  answers[n] = fallbackAnswer(q);
+                  invalid.push(n);
+                }
+              }
+              const cost = Number(data.usage?.cost ?? 0);
+              const result: DecideResult = { answers, cost: Number.isFinite(cost) ? cost : 0, fallback: false };
+              if (invalid.length) result.error = `invalid or missing answers: ${invalid.join(", ")}`;
+              return result;
             }
-            const cost = Number(data.usage?.cost ?? 0);
-            const result: DecideResult = { answers, cost: Number.isFinite(cost) ? cost : 0, fallback: false };
-            if (invalid.length) result.error = `invalid or missing answers: ${invalid.join(", ")}`;
-            return result;
+            error = `HTTP ${resp.status} (key ${idx + 1}/${this.keys.length}): ${(await resp.text().catch(() => "")).slice(0, 200)}`;
+            if ([401, 402, 403, 429].includes(resp.status) && this.keys.length > 1) {
+              rotate = true;
+              retryable = false;
+            } else {
+              retryable = resp.status >= 500 || resp.status === 429;
+            }
+          } catch (e) {
+            error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
           }
-          error = `HTTP ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 200)}`;
-          retryable = resp.status >= 500 || resp.status === 429;
-        } catch (e) {
-          error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+          if (!retryable) break;
+          if (attempt < this.retries) await new Promise((r) => setTimeout(r, this.backoffMs * (attempt + 1)));
         }
-        if (!retryable) break;
-        if (attempt < this.retries) await new Promise((r) => setTimeout(r, this.backoffMs * (attempt + 1)));
+        if (!rotate) break;
       }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
