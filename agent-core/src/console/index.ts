@@ -2,6 +2,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
+export * from "./render.js";
+
 let cachedHtml: string | null = null;
 
 export function getConsoleHtml(): string {

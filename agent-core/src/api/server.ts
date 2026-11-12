@@ -11,7 +11,7 @@ import type { CodeBlueEngine } from "../codeblue/session.js";
 import { handleCodeBlueRoute } from "../codeblue/routes.js";
 
 export interface ServerDeps {
-  audit: Pick<Audit, "list">;
+  audit: Pick<Audit, "list"> & { get?(id: string): Promise<any | null> };
   state: Pick<AgentState, "isStopped" | "setStopped">;
   loop: Pick<AgentLoop, "handle" | "retryPending">;
   health: { isUp(name: string): boolean };
@@ -23,6 +23,7 @@ export interface ServerDeps {
 
 const MAX_BODY = 16 * 1024;
 const MEDIA_ID = /^[a-zA-Z0-9_-]{1,128}$/;
+const AUDIT_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 class HttpError extends Error {
   constructor(readonly status: number, message: string) {
@@ -91,11 +92,26 @@ export function createServer(deps: ServerDeps): http.Server {
       return;
     }
 
+    const isAuditGet = method === "GET" && (path === "/audit" || path.startsWith("/audit/"));
     const known =
-      (method === "GET" && path === "/audit") ||
+      isAuditGet ||
       (method === "POST" && ["/control/stop", "/control/start", "/command", "/builder/task"].includes(path));
     if (!known) return send(res, 404, { error: "Not found" });
     if (!keyMatches(req.headers["x-admin-key"], adminKey)) return send(res, 401, { error: "Unauthorized" });
+
+    if (method === "GET" && path.startsWith("/audit/")) {
+      const auditId = path.slice("/audit/".length);
+      if (!AUDIT_ID.test(auditId)) {
+        return send(res, 400, { error: "Invalid audit id" });
+      }
+      const doc = audit.get
+        ? await audit.get(auditId)
+        : (await store.find("agent_audit", { _id: auditId }, undefined, 1))[0];
+      if (!doc) {
+        return send(res, 404, { error: "Audit not found" });
+      }
+      return send(res, 200, doc);
+    }
 
     if (path === "/audit") {
       const rawLimit = url.searchParams.get("limit");
