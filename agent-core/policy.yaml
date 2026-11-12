@@ -6,4 +6,5 @@ groups:
   radar: auto
   selfheal: auto
   dispatch: suggest
+  builder: suggest
 rate_limit_per_minute: 30
