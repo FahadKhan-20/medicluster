@@ -63,8 +63,9 @@ describe("tools", () => {
     expect(validateArgs(t, { fileId: "../x" }).length).toBeGreaterThan(0);
     expect(fetch).not.toHaveBeenCalled();
     expect(validateArgs(t, { fileId: "a_b-1", model_name: "m" })).toEqual([]);
-    await t.run({ fileId: "a b/c" }, mk(fetch));
-    expect((fetch.mock.calls[0] as unknown as [string])[0]).toBe("http://be:3000/api/media/analyze/a%20b%2Fc");
+    expect(validateArgs(t, { fileId: "a b/c" }).length).toBeGreaterThan(0);
+    await t.run({ fileId: "a_b-1" }, mk(fetch));
+    expect((fetch.mock.calls[0] as unknown as [string])[0]).toBe("http://be:3000/api/media/analyze/a_b-1");
   });
 
   it("analyze sends model_name in body", async () => {
@@ -77,6 +78,34 @@ describe("tools", () => {
   it("extra args rejected", () => {
     expect(validateArgs(tool("imaging.request_review"), { fileId: "f1", extra: 1 })).toContain("unexpected argument: extra");
     expect(validateArgs(tool("imaging.request_review"), {})).toContain("missing required argument: fileId");
+  });
+
+  it("inherited names are rejected as extra keys", () => {
+    for (const k of ["constructor", "toString", "valueOf", "hasOwnProperty"]) {
+      expect(validateArgs(tool("imaging.request_review"), { fileId: "f1", [k]: 1 })).toContain(`unexpected argument: ${k}`);
+    }
+    const alert = { patient_id: "p", source_id: "s", severity: "HIGH", title: "t", summary: "s", jev_probabilities: {}, audit_id: "a" };
+    expect(validateArgs(tool("alerts.create"), { ...alert, constructor: 1 })).toContain("unexpected argument: constructor");
+  });
+
+  it("run rejects invalid fileId without fetch", async () => {
+    const fetch = vi.fn(async () => json(200, {}));
+    for (const name of ["imaging.analyze", "imaging.request_review"]) {
+      const r = await tool(name).run({ fileId: ".." }, mk(fetch));
+      expect(r).toMatchObject({ ok: false, status: 0, retryable: false });
+      expect(r.ok === false && r.error).toMatch(/^invalid arguments: /);
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("alerts body contains only schema keys", async () => {
+    const fetch = vi.fn(async () => json(201, {}));
+    const alert = { patient_id: "p", source_id: "s", severity: "HIGH", title: "t", summary: "s", jev_probabilities: {}, audit_id: "a" };
+    await tool("alerts.create").run({ ...alert, constructor: 1 } as never, mk(fetch));
+    expect(fetch).not.toHaveBeenCalled();
+    await tool("alerts.create").run(alert, mk(fetch));
+    const init = (fetch.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(Object.keys(JSON.parse(init.body as string)).sort()).toEqual(Object.keys(alert).sort());
   });
 
   it("alerts.create enforces backend limits and posts body", async () => {

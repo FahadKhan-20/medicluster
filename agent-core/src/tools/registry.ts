@@ -38,7 +38,7 @@ export function validateArgs(tool: Tool, args: unknown): string[] {
   const a = args as Record<string, unknown>;
   const { properties, required } = tool.schema;
   const errors: string[] = [];
-  for (const k of Object.keys(a)) if (!(k in properties)) errors.push(`unexpected argument: ${k}`);
+  for (const k of Object.keys(a)) if (!Object.hasOwn(properties, k)) errors.push(`unexpected argument: ${k}`);
   for (const k of required) if (a[k] === undefined) errors.push(`missing required argument: ${k}`);
   for (const [k, p] of Object.entries(properties)) {
     const v = a[k];
@@ -65,7 +65,35 @@ export function validateArgs(tool: Tool, args: unknown): string[] {
   return errors;
 }
 
-export const TOOLS: Tool[] = [
+const ALERT_PROPS: Record<string, PropSchema> = {
+    patient_id: { type: "string", minLength: 1 },
+    source_id: { type: "string", minLength: 1 },
+    severity: { type: "string", enum: ["WARNING", "HIGH", "CRITICAL"] },
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    summary: { type: "string", minLength: 1, maxLength: 2000 },
+    jev_probabilities: { type: "object", maxJsonLength: 4000 },
+    audit_id: { type: "string", minLength: 1 },
+};
+
+type ToolSpec = Omit<Tool, "run"> & { exec(args: Record<string, unknown>, client: BackendClient): Promise<ToolResult> };
+
+/** Every tool validates its own arguments before touching the network. */
+function defineTool(spec: ToolSpec): Tool {
+  const { exec, ...rest } = spec;
+  const tool: Tool = {
+    ...rest,
+    async run(args, client) {
+      const errors = validateArgs(tool, args);
+      if (errors.length) {
+        return { ok: false, status: 0, error: `invalid arguments: ${errors.join("; ")}`, retryable: false };
+      }
+      return exec(args, client);
+    },
+  };
+  return tool;
+}
+
+export const TOOLS: Tool[] = ([
   {
     name: "imaging.analyze",
     group: "imaging",
@@ -76,7 +104,7 @@ export const TOOLS: Tool[] = [
       required: ["fileId"],
       additionalProperties: false,
     },
-    run: (args, client) => {
+    exec: (args, client) => {
       const body = typeof args.model_name === "string" ? { model_name: args.model_name } : undefined;
       return client.call("POST", `/api/media/analyze/${encodeURIComponent(String(args.fileId))}`, body);
     },
@@ -91,7 +119,7 @@ export const TOOLS: Tool[] = [
       required: ["fileId"],
       additionalProperties: false,
     },
-    run: (args, client) => client.call("POST", `/api/media/review/${encodeURIComponent(String(args.fileId))}`),
+    exec: (args, client) => client.call("POST", `/api/media/review/${encodeURIComponent(String(args.fileId))}`),
   },
   {
     name: "alerts.create",
@@ -99,21 +127,18 @@ export const TOOLS: Tool[] = [
     action: "alert",
     schema: {
       type: "object",
-      properties: {
-        patient_id: { type: "string", minLength: 1 },
-        source_id: { type: "string", minLength: 1 },
-        severity: { type: "string", enum: ["WARNING", "HIGH", "CRITICAL"] },
-        title: { type: "string", minLength: 1, maxLength: 200 },
-        summary: { type: "string", minLength: 1, maxLength: 2000 },
-        jev_probabilities: { type: "object", maxJsonLength: 4000 },
-        audit_id: { type: "string", minLength: 1 },
-      },
+      properties: ALERT_PROPS,
       required: ["patient_id", "source_id", "severity", "title", "summary", "jev_probabilities", "audit_id"],
       additionalProperties: false,
     },
-    run: (args, client) => client.call("POST", "/api/alerts/agent", args),
+    exec: (args, client) =>
+      client.call(
+        "POST",
+        "/api/alerts/agent",
+        Object.fromEntries(Object.keys(ALERT_PROPS).map((k) => [k, args[k]])),
+      ),
   },
-];
+] as ToolSpec[]).map(defineTool);
 
 export const toolForAction = (action: string): Tool | undefined => TOOLS.find((t) => t.action === action);
 
