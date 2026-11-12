@@ -51,4 +51,21 @@ router.post("/explain",          (req, res) => proxy(req, res, "/explain"));
 // RAG Chatbot
 router.post("/ask",              (req, res) => proxy(req, res, "/ask"));
 
+// Sepsis Scoring (PhysioNet 2019)
+router.post("/sepsis/score",     (req, res) => proxy(req, res, "/sepsis/score"));
+
+// Minimal agent-allowlisted read route to gather patient readings for sepsis workflow
+router.get("/readings/:patientId", async (req, res, next) => {
+  try {
+    const Reading = require("../models/Reading");
+    const readings = await Reading.find({ patientId: req.params.patientId })
+      .sort({ takenAt: -1 })
+      .limit(90)
+      .lean();
+    return res.json(readings);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 module.exports = router;
