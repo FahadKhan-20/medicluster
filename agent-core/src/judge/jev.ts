@@ -64,6 +64,27 @@ export function fallbackAnswer(q: Question): Answer {
 const fallbackAll = (questions: Record<string, Question>): Record<string, Answer> =>
   Object.fromEntries(Object.entries(questions).map(([n, q]) => [n, fallbackAnswer(q)]));
 
+const isNum = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
+
+function validAnswer(a: unknown, q: Question): a is Answer {
+  if (typeof a !== "object" || a === null || Array.isArray(a)) return false;
+  const r = a as Record<string, unknown>;
+  if (r.type !== q.type) return false;
+  if (q.type === "noul") return isNum(r.noul) && r.noul >= 0 && r.noul <= 1;
+  const probsOk =
+    r.probabilities === undefined ||
+    (typeof r.probabilities === "object" &&
+      r.probabilities !== null &&
+      !Array.isArray(r.probabilities) &&
+      Object.values(r.probabilities).every(isNum));
+  if (!probsOk) return false;
+  if (q.type === "choice") {
+    const keys = Array.isArray(q.criteria) ? q.criteria : Object.keys(q.criteria ?? {});
+    return typeof r.choice === "string" && keys.includes(r.choice);
+  }
+  return isNum(r.score);
+}
+
 export interface JevOptions {
   apiKey: string;
   model: string;
@@ -94,19 +115,19 @@ export class JevClient implements Decider {
   }
 
   async decide(state: unknown, questions: Record<string, Question>, _purpose = ""): Promise<DecideResult> {
-    const body = JSON.stringify({
-      model: this.model,
-      state,
-      questions: Object.fromEntries(
-        Object.entries(questions).map(([n, q]) => {
-          const { meta: _meta, ...rest } = q;
-          return [n, rest];
-        }),
-      ),
-    });
     const url = `${this.baseUrl}/alpha/decisions`;
     let error = "";
     try {
+      const body = JSON.stringify({
+        model: this.model,
+        state,
+        questions: Object.fromEntries(
+          Object.entries(questions).map(([n, q]) => {
+            const { meta: _meta, ...rest } = q;
+            return [n, rest];
+          }),
+        ),
+      });
       for (let attempt = 0; attempt <= this.retries; attempt++) {
         let retryable = true;
         try {
@@ -123,12 +144,19 @@ export class JevClient implements Decider {
             }
             const raw = data.answers as Record<string, Answer>;
             const answers: Record<string, Answer> = {};
+            const invalid: string[] = [];
             for (const [n, q] of Object.entries(questions)) {
               const a = raw[n];
-              answers[n] = a && typeof a === "object" ? a : fallbackAnswer(q);
+              if (validAnswer(a, q)) answers[n] = a;
+              else {
+                answers[n] = fallbackAnswer(q);
+                invalid.push(n);
+              }
             }
             const cost = Number(data.usage?.cost ?? 0);
-            return { answers, cost: Number.isFinite(cost) ? cost : 0, fallback: false };
+            const result: DecideResult = { answers, cost: Number.isFinite(cost) ? cost : 0, fallback: false };
+            if (invalid.length) result.error = `invalid or missing answers: ${invalid.join(", ")}`;
+            return result;
           }
           error = `HTTP ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 200)}`;
           retryable = resp.status >= 500 || resp.status === 429;

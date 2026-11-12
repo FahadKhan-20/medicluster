@@ -96,4 +96,52 @@ describe("JevClient", () => {
     expect(r.answers.a.noul).toBe(0.99);
     expect(r.answers.b).toEqual({ type: "noul", noul: 0.5 });
   });
+
+  it("circular state falls back without throwing", async () => {
+    const fetch = vi.fn();
+    const state: Record<string, unknown> = {};
+    state.self = state;
+    const r = await client(fetch).decide(state, { a: noul("q") });
+    expect(r.fallback).toBe(true);
+    expect(r.error).toBeTruthy();
+    expect(r.answers.a).toEqual({ type: "noul", noul: 0.5 });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  const one = async (q: ReturnType<typeof noul>, answer: unknown) => {
+    const fetch = vi.fn(async () => json(200, { answers: { a: answer } }));
+    return client(fetch).decide({}, { a: q });
+  };
+
+  it("string noul is replaced by fallback", async () => {
+    const r = await one(noul("q"), { type: "noul", noul: "0.99" });
+    expect(r.answers.a).toEqual({ type: "noul", noul: 0.5 });
+    expect(r.fallback).toBe(false);
+    expect(r.error).toContain("a");
+  });
+
+  it("out-of-range noul is replaced by fallback", async () => {
+    expect((await one(noul("q"), { type: "noul", noul: 1.5 })).answers.a.noul).toBe(0.5);
+  });
+
+  it("wrong type is replaced by fallback", async () => {
+    const r = await one(noul("q"), { type: "score", score: 1 });
+    expect(r.answers.a).toEqual({ type: "noul", noul: 0.5 });
+    expect((await one(noul("q"), [])).answers.a).toEqual({ type: "noul", noul: 0.5 });
+  });
+
+  it("unknown choice key is replaced by fallback", async () => {
+    const q = choice("q", { x: "X", y: "Y" });
+    const r = await one(q, { type: "choice", choice: "z", probabilities: { z: 1 } });
+    expect(r.answers.a.choice).toBe("x");
+    expect(r.answers.a.confidence).toBe(0);
+    const ok = await one(q, { type: "choice", choice: "y", probabilities: { x: 0.1, y: 0.9 } });
+    expect(ok.answers.a.choice).toBe("y");
+    expect(ok.error).toBeUndefined();
+  });
+
+  it("non-finite score is replaced by fallback", async () => {
+    const r = await one(score("q", ["a", "b", "c"]), { type: "score", score: "2" });
+    expect(r.answers.a.score).toBe(1);
+  });
 });
