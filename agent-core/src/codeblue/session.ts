@@ -4,7 +4,8 @@
  * specialist agent evaluation ticks, consensus card generation, and clinician acknowledgements.
  */
 
-import { CPR_CYCLE_SECONDS, EPINEPHRINE_INTERVAL_MIN_SECONDS } from "./acls.js";
+import { CPR_CYCLE_SECONDS, EPINEPHRINE_INTERVAL_MIN_SECONDS, computeNextEpiDue } from "./acls.js";
+import { calculateEgfr } from "./egfr.js";
 import {
   IntensivistAgent,
   PharmacologistAgent,
@@ -32,11 +33,13 @@ export interface CodeBlueSessionDeps {
 export interface SessionTelemetry {
   sessionId: string;
   patientId: string;
+  patientSummary: string;
   codeTimeSeconds: number;
   cprCycleNumber: number;
   cprRemainingSeconds: number;
   cprElapsedSeconds: number;
-  nextEpiDueInSeconds: number;
+  nextEpiDueInSeconds: number | null;
+  nextEpiText: string;
   shockCount: number;
   amiodaroneDosesGiven: number;
   hasPulse: boolean;
@@ -94,6 +97,22 @@ export class CodeBlueSession {
       allergies: ["iodine"], // Demo allergy for amiodarone veto
       currentMedications: ["carvedilol", "lisinopril"], // Demo beta-blocker interaction
     };
+    if (
+      !this.patientRecord.egfr &&
+      this.patientRecord.creatinineMgDl &&
+      this.patientRecord.ageYears &&
+      this.patientRecord.sex
+    ) {
+      try {
+        this.patientRecord.egfr = calculateEgfr(
+          this.patientRecord.creatinineMgDl,
+          this.patientRecord.ageYears,
+          this.patientRecord.sex,
+        );
+      } catch {
+        // Soft-fail on invalid inputs
+      }
+    }
     this.simulator = new CodeBlueSimulator();
     if (!useSimulator) {
       // If not using simulator, manual ticks
@@ -121,10 +140,13 @@ export class CodeBlueSession {
     const cprCycleNumber = Math.floor(elapsed / CPR_CYCLE_SECONDS) + 1;
     const cprRemainingSeconds = Math.max(0, CPR_CYCLE_SECONDS - cprElapsedSeconds);
 
-    const nextEpiDueInSeconds =
-      this.lastEpiTimeSeconds === undefined
-        ? 0
-        : Math.max(0, EPINEPHRINE_INTERVAL_MIN_SECONDS - (elapsed - this.lastEpiTimeSeconds));
+    const epiInfo = computeNextEpiDue(
+      monitor.rhythmName,
+      this.hasPulse,
+      this.shockCount,
+      elapsed,
+      this.lastEpiTimeSeconds,
+    );
 
     // 1. Evaluate Cardiologist
     const rhythmResult: RhythmClassifyResult = {
@@ -165,7 +187,7 @@ export class CodeBlueSession {
       intensivist: intensivistRec,
       pharmacologist: pharmRec,
       cardiologist: cardioRec,
-      nextDueInSeconds: Math.min(cprRemainingSeconds, nextEpiDueInSeconds || cprRemainingSeconds),
+      nextDueInSeconds: epiInfo.dueInSeconds !== null ? Math.min(cprRemainingSeconds, epiInfo.dueInSeconds) : cprRemainingSeconds,
       jev: deps.jev,
       gate: deps.gate,
       audit: deps.audit,
@@ -175,14 +197,24 @@ export class CodeBlueSession {
 
     this.latestCard = card;
 
+    const egfrStr = this.patientRecord.egfr
+      ? `eGFR: ${this.patientRecord.egfr.egfr} (${this.patientRecord.egfr.stage})`
+      : "eGFR: --";
+    const allergyStr = this.patientRecord.allergies?.length
+      ? `Allergy: ${this.patientRecord.allergies.join(", ")}`
+      : "Allergies: NKDA";
+    const patientSummary = `Patient: ${this.patientRecord.patientId} | ${this.patientRecord.ageYears ?? "--"}${this.patientRecord.sex ?? ""} | ${egfrStr} | ${allergyStr}`;
+
     const telemetry: SessionTelemetry = {
       sessionId: this.id,
       patientId: this.patientId,
+      patientSummary,
       codeTimeSeconds: elapsed,
       cprCycleNumber,
       cprRemainingSeconds,
       cprElapsedSeconds,
-      nextEpiDueInSeconds,
+      nextEpiDueInSeconds: epiInfo.dueInSeconds,
+      nextEpiText: epiInfo.statusText,
       shockCount: this.shockCount,
       amiodaroneDosesGiven: this.amiodaroneDosesGiven,
       hasPulse: this.hasPulse,

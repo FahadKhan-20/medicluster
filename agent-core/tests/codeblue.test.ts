@@ -13,6 +13,7 @@ import {
   AMIODARONE_FIRST_DOSE,
   AMIODARONE_SECOND_DOSE,
   isShockable,
+  computeNextEpiDue,
 } from "../src/codeblue/acls.js";
 import { calculateEgfr } from "../src/codeblue/egfr.js";
 import { checkDrugSafety } from "../src/codeblue/interactions.js";
@@ -58,6 +59,52 @@ function setupDeps(jevRule?: (name: string, q: any) => any) {
   });
 
   return { store, audit, state, gate, jev, db };
+}
+
+function createMockHttp(method: string, url: string, headers: Record<string, string>, bodyObj?: any) {
+  const req: any = {
+    method,
+    url,
+    headers,
+    async *[Symbol.asyncIterator]() {
+      if (bodyObj !== undefined) {
+        yield Buffer.from(JSON.stringify(bodyObj));
+      }
+    },
+  };
+
+  let statusCode = 0;
+  let responseHeaders: Record<string, string> = {};
+  let responseText = "";
+
+  const res: any = {
+    writeHead(status: number, h: Record<string, string>) {
+      statusCode = status;
+      responseHeaders = h;
+    },
+    end(chunk?: string) {
+      if (chunk) responseText += chunk;
+    },
+  };
+
+  return {
+    req: req as http.IncomingMessage,
+    res: res as http.ServerResponse,
+    get: () => {
+      let json = null;
+      try {
+        json = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        // not json
+      }
+      return {
+        status: statusCode,
+        headers: responseHeaders,
+        json,
+        text: responseText,
+      };
+    },
+  };
 }
 
 describe("1. ACLS Rule Engine Timings & Rules", () => {
@@ -183,6 +230,56 @@ describe("1. ACLS Rule Engine Timings & Rules", () => {
     expect(rec.action).toContain("Initiate Post-Cardiac Arrest Care");
     expect(rec.confidence).toBeGreaterThanOrEqual(0.98);
   });
+
+  it("calculates ACLS Epinephrine timing correctly for shockable vs non-shockable rhythms", () => {
+    // 1. Shockable rhythm (VF): at 00:11 with 0 shocks, Epi is NOT due yet (due after shock 2)
+    const shockableAt11s = computeNextEpiDue("VF", false, 0, 11, undefined);
+    expect(shockableAt11s.isDueNow).toBe(false);
+    expect(shockableAt11s.dueInSeconds).toBeNull();
+    expect(shockableAt11s.statusText).toBe("After Shock 2");
+
+    // After 1st shock (shockCount = 1): still not due
+    const shockableAfterShock1 = computeNextEpiDue("VF", false, 1, 40, undefined);
+    expect(shockableAfterShock1.isDueNow).toBe(false);
+    expect(shockableAfterShock1.dueInSeconds).toBeNull();
+    expect(shockableAfterShock1.statusText).toBe("After Shock 2");
+
+    // After 2nd shock (shockCount = 2, lastEpiTime = undefined): DUE NOW
+    const shockableAfterShock2 = computeNextEpiDue("VF", false, 2, 130, undefined);
+    expect(shockableAfterShock2.isDueNow).toBe(true);
+    expect(shockableAfterShock2.dueInSeconds).toBe(0);
+    expect(shockableAfterShock2.statusText).toBe("DUE NOW");
+
+    // After Epinephrine given at 130s, check at 140s (170s remaining)
+    const shockablePostEpi = computeNextEpiDue("VF", false, 2, 140, 130);
+    expect(shockablePostEpi.isDueNow).toBe(false);
+    expect(shockablePostEpi.dueInSeconds).toBe(170);
+    expect(shockablePostEpi.statusText).toBe("02:50");
+
+    // After 180s interval elapsed (at 315s): DUE NOW again
+    const shockableEpiRepeat = computeNextEpiDue("VF", false, 2, 315, 130);
+    expect(shockableEpiRepeat.isDueNow).toBe(true);
+    expect(shockableEpiRepeat.dueInSeconds).toBe(0);
+    expect(shockableEpiRepeat.statusText).toBe("DUE NOW");
+
+    // 2. Non-shockable rhythm (Asystole): at 00:11 with 0 shocks, Epi IS DUE NOW
+    const asystoleAt11s = computeNextEpiDue("ASYSTOLE", false, 0, 11, undefined);
+    expect(asystoleAt11s.isDueNow).toBe(true);
+    expect(asystoleAt11s.dueInSeconds).toBe(0);
+    expect(asystoleAt11s.statusText).toBe("DUE NOW");
+
+    // After Epi given at 15s in Asystole, check at 60s
+    const asystolePostEpi = computeNextEpiDue("ASYSTOLE", false, 0, 60, 15);
+    expect(asystolePostEpi.isDueNow).toBe(false);
+    expect(asystolePostEpi.dueInSeconds).toBe(135);
+    expect(asystolePostEpi.statusText).toBe("02:15");
+
+    // 3. ROSC: Epinephrine not indicated
+    const roscEpi = computeNextEpiDue("ROSC", true, 2, 350, 130);
+    expect(roscEpi.isDueNow).toBe(false);
+    expect(roscEpi.dueInSeconds).toBeNull();
+    expect(roscEpi.statusText).toBe("N/A (ROSC)");
+  });
 });
 
 describe("2. eGFR via CKD-EPI 2021 Race-Free Equation", () => {
@@ -222,6 +319,35 @@ describe("2. eGFR via CKD-EPI 2021 Race-Free Equation", () => {
     expect(() => calculateEgfr(0, 50, "M")).toThrow();
     expect(() => calculateEgfr(-1.2, 50, "M")).toThrow();
     expect(() => calculateEgfr(1.0, 0, "M")).toThrow();
+  });
+
+  it("computes eGFR once for demo patient (64M, Cr 1.6) matching Pharmacologist and page header", async () => {
+    const deps = setupDeps();
+    const engine = new CodeBlueEngine(deps);
+    const session = await engine.start("demo-egfr-patient");
+
+    // Computed via CKD-EPI 2021
+    const expectedEgfr = calculateEgfr(1.6, 64, "M");
+    expect(expectedEgfr.egfr).toBe(48);
+    expect(expectedEgfr.stage).toBe("G3a");
+
+    // 1. Session patient record has computed egfr
+    expect(session.patientRecord.egfr?.egfr).toBe(48);
+    expect(session.patientRecord.egfr?.stage).toBe("G3a");
+
+    // 2. Session telemetry has same eGFR in patientSummary
+    const telemetry = session.getLatestTelemetry();
+    expect(telemetry?.patientSummary).toContain("eGFR: 48 (G3a)");
+
+    // 3. Pharmacologist agent uses the same 48 mL/min (G3a)
+    expect(telemetry?.specialists.pharmacologist.rationale).toContain("48 mL/min");
+    expect(telemetry?.specialists.pharmacologist.rationale).toContain("G3a");
+
+    // 4. Static HTML page header has exact same 48 (G3a)
+    const { req, res, get } = createMockHttp("GET", "/codeblue", {});
+    await handleCodeBlueRoute(req, res, engine, "secret-key", (a, b) => a === b);
+    expect(get().text).toContain("eGFR: 48 (G3a)");
+    expect(get().text).not.toContain("eGFR: 46");
   });
 });
 
@@ -400,6 +526,11 @@ describe("5. Session Engine & Clinician Ack & Simulator", () => {
     expect(firstCard).toBeDefined();
     expect(firstCard?.status).toBe("Suggested — clinician confirms");
 
+    // In initial VF with 0 shocks, Next Epi is NOT due yet (gated on 2nd shock)
+    const initialTel = session.getLatestTelemetry();
+    expect(initialTel?.nextEpiDueInSeconds).toBeNull();
+    expect(initialTel?.nextEpiText).toBe("After Shock 2");
+
     // Clinician acknowledges action
     const ackRes = await engine.ack(session.id, "Shock 200 J biphasic (or manufacturer dose)", "Dr. Grey");
     expect(ackRes.acknowledged).toBe(true);
@@ -440,52 +571,6 @@ describe("5. Session Engine & Clinician Ack & Simulator", () => {
 });
 
 describe("6. HTTP API Routes (/codeblue)", () => {
-  function createMockHttp(method: string, url: string, headers: Record<string, string>, bodyObj?: any) {
-    const req: any = {
-      method,
-      url,
-      headers,
-      async *[Symbol.asyncIterator]() {
-        if (bodyObj !== undefined) {
-          yield Buffer.from(JSON.stringify(bodyObj));
-        }
-      },
-    };
-
-    let statusCode = 0;
-    let responseHeaders: Record<string, string> = {};
-    let responseText = "";
-
-    const res: any = {
-      writeHead(status: number, h: Record<string, string>) {
-        statusCode = status;
-        responseHeaders = h;
-      },
-      end(chunk?: string) {
-        if (chunk) responseText += chunk;
-      },
-    };
-
-    return {
-      req: req as http.IncomingMessage,
-      res: res as http.ServerResponse,
-      get: () => {
-        let json = null;
-        try {
-          json = responseText ? JSON.parse(responseText) : null;
-        } catch {
-          // not json
-        }
-        return {
-          status: statusCode,
-          headers: responseHeaders,
-          json,
-          text: responseText,
-        };
-      },
-    };
-  }
-
   it("serves static trauma-bay HTML on GET /codeblue", async () => {
     const deps = setupDeps();
     const engine = new CodeBlueEngine(deps);

@@ -30,6 +30,7 @@ export interface PatientRecord {
   creatinineMgDl?: number;
   allergies?: string[];
   currentMedications?: string[];
+  egfr?: EgfrResult;
 }
 
 export interface IntensivistState {
@@ -96,7 +97,7 @@ export class IntensivistAgent {
 
     // 3. Shockable branch (VF / Pulseless VT)
     if (shockable) {
-      if (shockPending || shockCount === 0 || cprElapsedSeconds < 15) {
+      if (shockPending || shockCount === 0) {
         return {
           agent: "Intensivist",
           action: SHOCK_DOSE_BIPHASIC,
@@ -191,19 +192,19 @@ export class PharmacologistAgent {
     intensivistAction: string,
   ): SpecialistRecommendation {
     const warnings: string[] = [];
-    let egfrInfo: EgfrResult | null = null;
+    let egfrInfo: EgfrResult | null = patient?.egfr ?? null;
 
-    if (patient?.creatinineMgDl && patient?.ageYears && patient?.sex) {
+    if (!egfrInfo && patient?.creatinineMgDl && patient?.ageYears && patient?.sex) {
       try {
         egfrInfo = calculateEgfr(patient.creatinineMgDl, patient.ageYears, patient.sex);
-        if (egfrInfo.severeImpairment) {
-          warnings.push(
-            `Severe renal impairment: eGFR ${egfrInfo.egfr} mL/min/1.73m² (${egfrInfo.stage}). Anticipate altered clearance of post-arrest meds.`,
-          );
-        }
       } catch {
         // Soft-fail on invalid numeric input
       }
+    }
+    if (egfrInfo?.severeImpairment) {
+      warnings.push(
+        `Severe renal impairment: eGFR ${egfrInfo.egfr} mL/min/1.73m² (${egfrInfo.stage}). Anticipate altered clearance of post-arrest meds.`,
+      );
     }
 
     // Determine target drug in candidate action

@@ -3,7 +3,10 @@
  * Self-contained static HTML page (no external build or bundler needed) served at GET /codeblue.
  */
 
+import { calculateEgfr } from "./egfr.js";
+
 export function renderCodeBluePage(adminKey = ""): string {
+  const demoEgfr = calculateEgfr(1.6, 64, "M");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -351,7 +354,7 @@ canvas#ecgCanvas {
   <div class="brand">
     <div class="alert-pulse"></div>
     <div class="brand-title">MEDICLUSTER — CODE BLUE WAR ROOM</div>
-    <div class="patient-badge" id="patientInfo">Patient: DEMO-ARREST-1 | 64M | eGFR: 46 (G3a) | Allergy: Iodine</div>
+    <div class="patient-badge" id="patientInfo">Patient: DEMO-ARREST-1 | 64M | eGFR: ${demoEgfr.egfr} (${demoEgfr.stage}) | Allergy: Iodine</div>
   </div>
   <div class="header-timers">
     <div class="timer-box">
@@ -364,7 +367,7 @@ canvas#ecgCanvas {
     </div>
     <div class="timer-box">
       <div class="timer-label">Next Epi Due</div>
-      <div class="timer-value" id="epiTimer">ASAP</div>
+      <div class="timer-value" id="epiTimer">After Shock 2</div>
     </div>
     <div class="timer-box">
       <div class="timer-label">Shocks Given</div>
@@ -544,10 +547,30 @@ async function poll() {
     const tel = data.telemetry;
     const card = data.card;
 
+    // Patient Info
+    if (tel.patientSummary) {
+      document.getElementById('patientInfo').innerText = tel.patientSummary;
+    }
+
     // Timers
     document.getElementById('codeTimer').innerText = formatTime(tel.codeTimeSeconds);
     document.getElementById('cprTimer').innerText = formatTime(tel.cprRemainingSeconds);
-    document.getElementById('epiTimer').innerText = tel.nextEpiDueInSeconds === 0 ? 'DUE NOW' : formatTime(tel.nextEpiDueInSeconds);
+
+    const epiEl = document.getElementById('epiTimer');
+    if (tel.nextEpiText) {
+      epiEl.innerText = tel.nextEpiText;
+      epiEl.className = tel.nextEpiText === 'DUE NOW' ? 'timer-value red' : 'timer-value';
+    } else if (tel.nextEpiDueInSeconds === null) {
+      epiEl.innerText = 'After Shock 2';
+      epiEl.className = 'timer-value';
+    } else if (tel.nextEpiDueInSeconds === 0) {
+      epiEl.innerText = 'DUE NOW';
+      epiEl.className = 'timer-value red';
+    } else {
+      epiEl.innerText = formatTime(tel.nextEpiDueInSeconds);
+      epiEl.className = 'timer-value';
+    }
+
     document.getElementById('shockCount').innerText = tel.shockCount;
 
     // Monitor Header
