@@ -20,6 +20,7 @@ import { SepsisWorkflow } from "./workflows/sepsis.js";
 import { createServer } from "./api/server.js";
 import { trackInFlight } from "./lifecycle.js";
 import { registerRadarWorkflow } from "./workflows/radar.js";
+import { CodeBlueEngine } from "./codeblue/session.js";
 
 const RETRY_INTERVAL_MS = 60_000;
 
@@ -109,6 +110,7 @@ async function main(): Promise<void> {
 
   const builder = new BuilderService({ audit, state, jev, gate });
   const server = createServer({ audit, state, loop, health, store, adminKey: config.adminKey, builder });
+  const server = createServer({ audit, state, loop, health, store, adminKey: config.adminKey, codeblue: new CodeBlueEngine({ jev, gate, audit, state, llm }) });
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   log(`listening on ${config.port}`);
 

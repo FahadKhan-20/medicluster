@@ -11,6 +11,7 @@ from runtime import ApiError
 import brain
 import radar
 import ecg
+import rhythm
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 128 * 1024 * 1024
@@ -48,5 +49,6 @@ def health(): return jsonify(service='medicluster-intelligence', brain=brain.sta
 app.register_blueprint(brain.bp)
 app.register_blueprint(radar.bp)
 app.register_blueprint(ecg.bp)
+app.register_blueprint(rhythm.bp)
 
 if __name__ == '__main__': app.run(host='127.0.0.1', port=8090, threaded=True, debug=False)

@@ -7,6 +7,8 @@ import type { McStore } from "../store/mc.js";
 import type { BuilderService } from "../builder/builder.js";
 import { rowToEvent } from "../events/events.js";
 import { getConsoleHtml } from "../console/index.js";
+import type { CodeBlueEngine } from "../codeblue/session.js";
+import { handleCodeBlueRoute } from "../codeblue/routes.js";
 
 export interface ServerDeps {
   audit: Pick<Audit, "list">;
@@ -16,6 +18,7 @@ export interface ServerDeps {
   store: Pick<McStore, "find">;
   adminKey: string;
   builder?: Pick<BuilderService, "handleTask">;
+  codeblue?: CodeBlueEngine;
 }
 
 const MAX_BODY = 16 * 1024;
@@ -82,6 +85,8 @@ export function createServer(deps: ServerDeps): http.Server {
 
     if (method === "GET" && (path === "/console" || path === "/console/" || path === "/console/index.html")) {
       return sendHtml(res, 200, getConsoleHtml());
+    if (deps.codeblue && (await handleCodeBlueRoute(req, res, deps.codeblue, adminKey, keyMatches))) {
+      return;
     }
 
     const known =
