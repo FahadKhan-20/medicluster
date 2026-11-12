@@ -96,7 +96,11 @@ export function createServer(deps: ServerDeps): http.Server {
 
     if (path === "/control/start") {
       await state.setStopped(false);
-      await loop.retryPending();
+      try {
+        await loop.retryPending();
+      } catch (err) {
+        console.error("[api] retryPending after start failed", err);
+      }
       return send(res, 200, { stopped: false });
     }
 

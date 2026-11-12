@@ -11,6 +11,7 @@ import { EventSource, realtimeSubscribe, type Event } from "./events/events.js";
 import { HealthPoller } from "./events/health.js";
 import { AgentLoop } from "./agent/loop.js";
 import { createServer } from "./api/server.js";
+import { trackInFlight } from "./lifecycle.js";
 
 const RETRY_INTERVAL_MS = 60_000;
 
@@ -37,7 +38,11 @@ async function main(): Promise<void> {
     },
   });
   const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health });
-  const retry = () => loop.retryPending().catch((err) => console.error("[agent-core] retryPending failed", err));
+  const work = trackInFlight();
+  const retry = work.wrap(() =>
+    loop.retryPending().catch((err) => console.error("[agent-core] retryPending failed", err)),
+  );
+  const handle = work.wrap((e: Event) => loop.handle(e).then(() => undefined));
 
   const events = new EventSource({
     store,
@@ -54,23 +59,24 @@ async function main(): Promise<void> {
     if (e.type === "service.up") void retry();
   });
   const retryTimer = setInterval(() => void retry(), RETRY_INTERVAL_MS);
-  await events.start((e) => loop.handle(e).then(() => undefined));
+  await events.start(handle);
 
   let shuttingDown = false;
-  const shutdown = (signal: string) => {
+  const shutdown = async (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     log(`${signal} received, shutting down`);
+    setTimeout(() => process.exit(0), 10_000).unref();
     events.stop();
     health.stop();
     clearInterval(retryTimer);
     policyStore.close();
+    await work.drain();
     server.close(() => process.exit(0));
     server.closeIdleConnections();
-    setTimeout(() => process.exit(0), 10_000).unref();
   };
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
 main().catch((err) => {

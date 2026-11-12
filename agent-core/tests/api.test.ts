@@ -139,3 +139,14 @@ describe("api", () => {
     expect((await fetch(`${base}/nope`)).status).toBe(404);
   });
 });
+
+describe("control/start resilience", () => {
+  it("returns 200 stopped:false when retryPending throws", async () => {
+    (server as any).__loop.retryPending.mockRejectedValueOnce(new Error("boom"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await post("/control/start");
+    spy.mockRestore();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ stopped: false });
+  });
+});
