@@ -80,3 +80,51 @@ Returns 404 if the media does not exist and 400 if it has not been analysed.
 ## Smoke testing
 
 Use synthetic data only. Never point tests or smoke runs at real patient records.
+
+## Demo
+
+A one-click end-to-end CLI demo runner exercises all five autonomous clinical agent capabilities sequentially:
+
+```bash
+# Full dry-run (prints all synthetic requests without network calls)
+npm run demo -- --dry-run
+
+# Run against local stack
+npm run demo
+
+# Filter to a specific step
+npm run demo -- --only 1
+npm run demo -- --only codeblue
+
+# Custom demo patient (must start with DEMO-)
+npm run demo -- --patient DEMO-P042
+```
+
+### Environment Variables
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `BACKEND_URL` | no | `http://localhost:5000` | MediCluster backend API URL |
+| `DISPATCH_URL` | no | `http://localhost:3001` | CAD ambulance dispatch API URL |
+| `AGENT_URL` | no | `http://localhost:8100` | Agent-Core HTTP API URL |
+| `AGENT_ADMIN_KEY` | no | `""` | Value for `x-admin-key` header to authenticate `/audit` & `/codeblue` |
+| `DEMO_STAFF_EMAIL` | live only | `""` | Clinician email for demo login (never hardcoded) |
+| `DEMO_STAFF_PASSWORD` | live only | `""` | Clinician password for demo login (never hardcoded) |
+
+### CLI Options
+
+- `--only <step>`: Run only a single step by number (`1`..`5`) or name (`imaging`, `radar`, `ecg`, `dispatch`, `codeblue`).
+- `--dry-run`: Print synthetic payloads and target endpoints without dispatching network calls.
+- `--patient <id>`: Demo patient identifier (default: `DEMO-P001`). Enforces strict safety guard: **refuses to run** if the ID does not start with `DEMO-`.
+- `--timeout <sec>`: Timeout per step in seconds when polling `GET /audit` (default: 90s, never hangs).
+
+### Workflow Steps
+
+1. **Imaging**: Generates an in-memory 256x256 grayscale chest X-ray PNG and uploads it for the demo patient via `POST /api/media/upload`.
+2. **Radar/Sepsis**: Submits an 8-reading deteriorating vitals sequence (HR rising 80→150, BP falling 125/82→70/45, Temp rising 37.0→40.0°C, RR rising 16→38) via the backend readings API.
+3. **ECG**: Submits a synthetic 10-second 12-lead ECG recording (12 leads × 1000 samples) via `POST /api/ecg/upload`.
+4. **Dispatch**: Dispatches a synthetic SOS emergency incident via `POST /api/incidents` on the CAD dispatch API.
+5. **Code Blue**: Initiates an acute ventricular fibrillation resuscitation session via `POST /codeblue/start` and formats the consensus decision card.
+
+Each step logs timestamps, queries `GET /audit` for agent execution outcomes, and concludes with a formatted summary table.
+
