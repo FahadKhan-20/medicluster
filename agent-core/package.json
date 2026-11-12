@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "demo": "node --experimental-strip-types scripts/demo.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2",
