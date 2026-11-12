@@ -62,6 +62,17 @@ test('duplicate source_id+audit_id returns existing', async t => {
   assert.equal(await AgentAlert.countDocuments({}), 1);
 });
 
+test('duplicate idem_key returns existing even with different audit_id', async t => {
+  const { call, agent } = await setup(t);
+  const AgentAlert = require('../models/AgentAlert');
+  const first = await call('POST', '/api/alerts/agent', agent, body({ audit_id: 'audit-1', idem_key: 'event-1:alert' }));
+  const second = await call('POST', '/api/alerts/agent', agent, body({ audit_id: 'audit-2', idem_key: 'event-1:alert', title: 'Different title' }));
+  assert.equal(first.status, 201);
+  assert.equal(second.status, 200);
+  assert.equal(second.body._id, first.body._id);
+  assert.equal(await AgentAlert.countDocuments({}), 1);
+});
+
 test('validation', async t => {
   const { call, agent } = await setup(t);
   const { patient_id, ...missing } = body();

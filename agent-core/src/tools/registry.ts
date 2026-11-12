@@ -73,6 +73,7 @@ const ALERT_PROPS: Record<string, PropSchema> = {
     summary: { type: "string", minLength: 1, maxLength: 2000 },
     jev_probabilities: { type: "object", maxJsonLength: 4000 },
     audit_id: { type: "string", minLength: 1 },
+    idem_key: { type: "string", minLength: 1, maxLength: 256 },
 };
 
 type ToolSpec = Omit<Tool, "run"> & { exec(args: Record<string, unknown>, client: BackendClient): Promise<ToolResult> };
@@ -135,7 +136,7 @@ export const TOOLS: Tool[] = ([
       client.call(
         "POST",
         "/api/alerts/agent",
-        Object.fromEntries(Object.keys(ALERT_PROPS).map((k) => [k, args[k]])),
+        Object.fromEntries(Object.keys(ALERT_PROPS).filter((k) => args[k] !== undefined).map((k) => [k, args[k]])),
       ),
   },
 ] as ToolSpec[]).map(defineTool);

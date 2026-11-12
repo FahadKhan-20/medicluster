@@ -4,7 +4,7 @@ export interface Rpc {
   (name: string, args: object): Promise<unknown>;
 }
 
-export function supabaseRpc(url: string, key: string, fetchImpl: typeof fetch = fetch): Rpc {
+export function supabaseRpc(url: string, key: string, fetchImpl: typeof fetch = fetch, timeoutMs = 30_000): Rpc {
   const base = url.replace(/\/+$/, "");
   return async (name, args) => {
     const headers: Record<string, string> = { "content-type": "application/json", apikey: key };
@@ -13,6 +13,7 @@ export function supabaseRpc(url: string, key: string, fetchImpl: typeof fetch = 
       method: "POST",
       headers,
       body: JSON.stringify(args),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) throw new Error(`rpc ${name} failed: ${res.status} ${await res.text().catch(() => "")}`);
     const text = await res.text();

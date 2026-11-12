@@ -72,15 +72,19 @@ export class EventSource {
   private catchingUp = false;
   private retryMs: number;
   private retryTimer?: ReturnType<typeof setTimeout>;
+  private sweepIntervalMs: number;
+  private sweepTimer?: ReturnType<typeof setInterval>;
 
   constructor(opts: {
     retryMs?: number;
+    sweepIntervalMs?: number;
     store: McStore;
     state: AgentState;
     subscribe: Subscribe;
     onError?: (err: unknown) => void;
   }) {
     this.retryMs = opts.retryMs ?? 5000;
+    this.sweepIntervalMs = opts.sweepIntervalMs ?? 60_000;
     this.store = opts.store;
     this.state = opts.state;
     this.subscribe = opts.subscribe;
@@ -100,6 +104,11 @@ export class EventSource {
       () => this.enqueue(() => this.catchUp()),
     );
     await this.enqueue(() => this.catchUp());
+    if (this.sweepIntervalMs > 0) {
+      this.sweepTimer = setInterval(() => {
+        void this.enqueue(() => this.catchUp());
+      }, this.sweepIntervalMs);
+    }
   }
 
   stop(): void {
@@ -109,6 +118,10 @@ export class EventSource {
     this.stopped = true;
     clearTimeout(this.retryTimer);
     this.retryTimer = undefined;
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = undefined;
+    }
   }
 
   private scheduleRetry(): void {
@@ -127,8 +140,14 @@ export class EventSource {
 
   private async onRealtime(p: RealtimePayload): Promise<void> {
     const isInsert = p.eventType === "INSERT";
-    const event = rowToEvent(p.new, isInsert ? undefined : (p.old ?? {}));
-    if (event) await this.deliver(event, p.new?.data?.updatedAt);
+    let event = rowToEvent(p.new, isInsert ? undefined : (p.old ?? {}));
+    if (!event && p.new?.collection === MEDIA && p.new?.id) {
+      const docs = await this.store.find(MEDIA, { _id: p.new.id }, {}, 1);
+      if (docs[0]) {
+        event = rowToEvent({ collection: MEDIA, data: docs[0] }, isInsert ? undefined : (p.old ?? {}));
+      }
+    }
+    if (event) await this.deliver(event, p.new?.data?.updatedAt || event.doc?.updatedAt);
   }
 
   private async catchUp(): Promise<void> {
@@ -197,7 +216,7 @@ export function realtimeSubscribe(supabaseUrl: string, key: string): Subscribe {
         (payload: any) => onRow({ eventType: payload.eventType, new: payload.new, old: payload.old }),
       )
       .subscribe((status: string) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") degraded = true;
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") degraded = true;
         else if (status === "SUBSCRIBED" && degraded) {
           degraded = false;
           onReconnect?.();

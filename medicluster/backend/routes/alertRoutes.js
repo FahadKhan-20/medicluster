@@ -154,12 +154,13 @@ const isText = (v, max) => typeof v === "string" && v.trim().length > 0 && v.len
 router.post("/agent", async (req, res, next) => {
   try {
     if (!req.agent) return res.status(403).json({ error: "Agent sign-in required" });
-    const { patient_id, source_id, severity, title, summary, jev_probabilities, audit_id } = req.body || {};
+    const { patient_id, source_id, severity, title, summary, jev_probabilities, audit_id, idem_key } = req.body || {};
     const probabilities = jev_probabilities;
     const problem =
       !isText(patient_id, MAX_ID) ? "patient_id is required" :
       !isText(source_id, MAX_ID) ? "source_id is required" :
       !isText(audit_id, MAX_ID) ? "audit_id is required" :
+      idem_key !== undefined && !isText(idem_key, 256) ? "idem_key must be a non-empty string up to 256 characters" :
       !SEVERITIES.includes(severity) ? `severity must be one of ${SEVERITIES.join(", ")}` :
       !isText(title, MAX_TITLE) ? `title is required (max ${MAX_TITLE} chars)` :
       !isText(summary, MAX_SUMMARY) ? `summary is required (max ${MAX_SUMMARY} chars)` :
@@ -167,9 +168,22 @@ router.post("/agent", async (req, res, next) => {
       JSON.stringify(probabilities).length > MAX_PROBABILITIES_JSON ? `jev_probabilities exceeds ${MAX_PROBABILITIES_JSON} characters` : null;
     if (problem) return res.status(400).json({ error: problem });
 
+    if (idem_key) {
+      const existingByIdem = await AgentAlert.findOne({ idem_key }).lean();
+      if (existingByIdem) return res.status(200).json(existingByIdem);
+    }
     const existing = await AgentAlert.findOne({ source_id, audit_id }).lean();
     if (existing) return res.status(200).json(existing);
-    const created = await AgentAlert.create({ patient_id, source_id, severity, title, summary, jev_probabilities: probabilities, audit_id });
+    const created = await AgentAlert.create({
+      patient_id,
+      source_id,
+      severity,
+      title,
+      summary,
+      jev_probabilities: probabilities,
+      audit_id,
+      ...(idem_key ? { idem_key } : {}),
+    });
     return res.status(201).json(created.toObject ? created.toObject() : created);
   } catch (err) {
     return next(err);

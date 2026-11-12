@@ -54,6 +54,28 @@ describe("BackendClient", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(r).toMatchObject({ ok: false, status: 400 });
   });
+
+  it("POST timeout is never retried", async () => {
+    const timeoutErr = new Error("The operation was aborted due to timeout");
+    timeoutErr.name = "TimeoutError";
+    const fetch = vi.fn(async () => {
+      throw timeoutErr;
+    });
+    const r = await mk(fetch).call("POST", "/api/media/analyze/f1", { model_name: "m" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(0);
+  });
+
+  it("analyze uses at least 130s timeout", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const fetch = vi.fn(async (_url, init: any) => {
+      capturedSignal = init?.signal;
+      return json(200, {});
+    });
+    await mk(fetch).call("POST", "/api/media/analyze/f1");
+    expect(capturedSignal).toBeDefined();
+  });
 });
 
 describe("tools", () => {

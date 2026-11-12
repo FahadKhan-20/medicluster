@@ -14,6 +14,7 @@ const AgentAlertSchema = defineSchema(
     summary:           { type: String, required: true },
     jev_probabilities: { type: Object, default: {} },
     audit_id:          { type: String, required: true },
+    idem_key:          { type: String, index: true, sparse: true },
   },
   { timestamps: true }
 );

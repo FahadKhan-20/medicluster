@@ -37,7 +37,7 @@ async function main(): Promise<void> {
       intelligence: `${config.intelUrl}/`,
     },
   });
-  const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health });
+  const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health, store });
   const work = trackInFlight();
   const retry = work.wrap(() =>
     loop.retryPending().catch((err) => console.error("[agent-core] retryPending failed", err)),

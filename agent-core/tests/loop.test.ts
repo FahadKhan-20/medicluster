@@ -97,9 +97,9 @@ function setup(o: {
   const health = { isUp: (n: string) => o.up?.[n] ?? true };
   const jev = o.jev ?? new FakeJev(jevRules("alert", 0.95));
   const llm = new FakeLlm(o.llm ?? ((system, user) => (system === STATE_PROMPT ? STATE : argsFor(user))));
-  const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health });
+  const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health, store });
   const audits = () => [...(db.get("agent_audit")?.values() ?? [])];
-  return { loop, calls, state, audit, audits, jev, llm };
+  return { loop, calls, state, audit, audits, jev, llm, store };
 }
 
 describe("JEV_QUESTIONS", () => {
@@ -134,6 +134,7 @@ describe("AgentLoop", () => {
         act_now: 0.95,
       },
       audit_id: a._id,
+      idem_key: `${analyzed().id}:alert`,
     });
     expect(a.steps.map((s: any) => s.kind)).toEqual(expect.arrayContaining(["state", "jev", "gate", "tool"]));
     expect(a.outcome).toBe("executed");
@@ -175,8 +176,8 @@ describe("AgentLoop", () => {
     expect(t.calls).toEqual([{ method: "POST", path: "/api/media/review/g1", body: undefined }]);
     expect(t.calls.some((c) => c.path === "/api/alerts/agent")).toBe(false);
     expect(t.audits()[0].reason).toBe("low_confidence");
-    // a repeat does not request a second review
-    expect(await t.loop.handle(analyzed())).toBe("review");
+    // a repeat does not request a second review (skipped via decided marker)
+    expect(await t.loop.handle(analyzed())).toBe("skipped");
     expect(t.calls).toHaveLength(1);
   });
 
@@ -190,7 +191,7 @@ describe("AgentLoop", () => {
   it("upload with analyze executes analysis", async () => {
     const t = setup({ jev: new FakeJev(jevRules("analyze", 0.95)) });
     expect(await t.loop.handle(uploaded())).toBe("executed");
-    expect(t.calls).toEqual([{ method: "POST", path: "/api/media/analyze/g2", body: undefined }]);
+    expect(t.calls).toEqual([{ method: "POST", path: "/api/media/analyze/g2", body: { model_name: "densenet121-res224-all" } }]);
   });
 
   it("jev fallback never executes", async () => {
@@ -275,9 +276,9 @@ describe("AgentLoop", () => {
   it("re-analysis with same analyzedAt creates no second alert", async () => {
     const t = setup();
     expect(await t.loop.handle(analyzed())).toBe("executed");
-    expect(await t.loop.handle(analyzed())).toBe("blocked");
+    expect(await t.loop.handle(analyzed())).toBe("skipped");
     expect(t.calls.filter((c) => c.path === "/api/alerts/agent")).toHaveLength(1);
-    expect(t.audits()[1].reason).toBe("duplicate");
+    expect(t.audits()).toHaveLength(1);
   });
 
   it("ml worker down marks analysis_unavailable", async () => {
@@ -307,7 +308,7 @@ describe("AgentLoop", () => {
     expect(await t.loop.retryPending()).toBe(1);
     expect(await t.state.drain()).toHaveLength(1);
     down = false;
-    expect(await t.loop.retryPending()).toBe(1);
+    expect(await t.loop.retryPending(new Date(Date.now() + 130_000).toISOString())).toBe(1);
     expect(t.audits().at(-1).outcome).toBe("executed");
     expect(t.calls.filter((c) => c.path === "/api/alerts/agent")).toHaveLength(1);
     expect(await t.state.drain()).toHaveLength(0);
@@ -469,7 +470,7 @@ describe("AgentLoop", () => {
       llm: (s) => (s === STATE_PROMPT ? STATE : { tool: "imaging.analyze", arguments: { model_name: "other" } }),
     });
     expect(await t.loop.handle(uploaded())).toBe("executed");
-    expect(t.calls[0].body).toBeUndefined();
+    expect(t.calls[0].body).toEqual({ model_name: "densenet121-res224-all" });
     const a = setup();
     await a.loop.handle(analyzed());
     const sent = JSON.parse(a.llm.calls.find((c) => c.system === ARGS_PROMPT)!.user);
@@ -515,13 +516,169 @@ describe("AgentLoop", () => {
   });
 
   it("408 and 429 backend responses are retryable", async () => {
-    for (const status of [408, 429]) {
+    for (const [status, expectedReason] of [[408, "backend_unavailable"], [429, "rate_limited"]] as const) {
       const t = setup({ backendResult: () => ({ ok: false, status, error: `HTTP ${status}`, retryable: false }) });
       expect(await t.loop.handle(analyzed())).toBe("pending");
-      expect(t.audits()[0].reason).toBe("backend_unavailable");
+      expect(t.audits()[0].reason).toBe(expectedReason);
       expect(await t.state.drain()).toHaveLength(1);
     }
     const t = setup({ backendResult: () => ({ ok: false, status: 404, error: "HTTP 404", retryable: false }) });
     expect(await t.loop.handle(analyzed())).toBe("failed");
+  });
+
+  // ---- Critical #1 and review findings tests ----
+
+  it("fresh scan.uploaded is delayed 120s and not analysed immediately", async () => {
+    const t = setup();
+    const freshDoc = { _id: "m_fresh", gridfs_id: "g_fresh", patient_id: "p1", file_type: "image", file_name: "chest.png" };
+    const freshEvent: Event = {
+      id: "m_fresh:new",
+      type: "scan.uploaded",
+      mediaId: "m_fresh",
+      doc: freshDoc,
+      at: new Date().toISOString(),
+    };
+    const outcome = await t.loop.handle(freshEvent);
+    expect(outcome).toBe("pending");
+    expect(t.calls).toHaveLength(0); // no analyze called!
+    expect(t.audits()).toHaveLength(0); // no audit created during delay!
+    const queueDocs = await t.state.drain();
+    expect(queueDocs).toHaveLength(1);
+    expect(queueDocs[0].notBefore).toBeDefined();
+    // before 120s, retryPending does not run it
+    expect(await t.loop.retryPending()).toBe(0);
+    expect(t.calls).toHaveLength(0);
+  });
+
+  it("due scan.uploaded re-reads media doc from store and skips if already analysed", async () => {
+    const t = setup();
+    const freshDoc = { _id: "m_fresh", gridfs_id: "g_fresh", patient_id: "p1", file_type: "image", file_name: "chest.png" };
+    // Insert into store as already analysed by imaging page
+    await t.store.insert("patientmedias", {
+      _id: "m_fresh",
+      analysis: { analyzedAt: "2026-11-12T10:01:00.000Z", model: "densenet121" },
+    });
+    const dueEvent: Event = {
+      id: "m_fresh:new",
+      type: "scan.uploaded",
+      mediaId: "m_fresh",
+      doc: freshDoc,
+      at: new Date(Date.now() - 130_000).toISOString(),
+    };
+    const outcome = await t.loop.handle(dueEvent);
+    expect(outcome).toBe("skipped");
+    expect(t.calls).toHaveLength(0);
+    expect(t.audits()[0].reason).toBe("already_analyzed");
+  });
+
+  it("due scan.uploaded with brain/NIfTI hints requests review audit-only", async () => {
+    const t = setup({ jev: new FakeJev(jevRules("analyze", 0.95)) });
+    const brainDoc = { _id: "m_brain", gridfs_id: "g_brain", patient_id: "p1", file_type: "image", file_name: "brain_mri_t1.png" };
+    const dueEvent: Event = {
+      id: "m_brain:new",
+      type: "scan.uploaded",
+      mediaId: "m_brain",
+      doc: brainDoc,
+      at: new Date(Date.now() - 130_000).toISOString(),
+    };
+    const outcome = await t.loop.handle(dueEvent);
+    expect(outcome).toBe("review");
+    expect(t.calls).toHaveLength(0); // audit only!
+    expect(t.audits()[0].reason).toBe("brain_or_nifti_requires_review");
+  });
+
+  it("re-reads doc right before every write: skips write if doc was analysed concurrently", async () => {
+    const t = setup({ jev: new FakeJev(jevRules("analyze", 0.95)) });
+    const plainDoc = { _id: "m_race", gridfs_id: "g_race", patient_id: "p1", file_type: "image", file_name: "chest.png", mimetype: "image/png" };
+    await t.store.insert("patientmedias", {
+      ...plainDoc,
+    });
+    // Simulate concurrent analysis saved in store right before write
+    (t.loop as any).d.llm = new FakeLlm((system, user) => {
+      if (system === STATE_PROMPT) {
+        void t.store.update("patientmedias", { _id: "m_race" }, {
+          $set: { analysis: { analyzedAt: new Date().toISOString(), model: "user-model" } },
+        });
+        return STATE;
+      }
+      return argsFor(user);
+    });
+    const dueEvent: Event = {
+      id: "m_race:new",
+      type: "scan.uploaded",
+      mediaId: "m_race",
+      doc: plainDoc,
+      at: new Date(Date.now() - 130_000).toISOString(),
+    };
+    const outcome = await t.loop.handle(dueEvent);
+    expect(outcome).toBe("skipped");
+    expect(t.calls).toHaveLength(0);
+    expect(t.audits()[0].reason).toBe("already_analyzed");
+  });
+
+  it("patient imaging-session prevents alerts and backend review", async () => {
+    const t = setup({ jev: new FakeJev(jevRules("alert", 0.95)) });
+    const sessionDoc = { ...DOC, patient_id: "imaging-session" };
+    const outcome = await t.loop.handle(analyzed(sessionDoc));
+    expect(outcome).toBe("review");
+    expect(t.calls).toHaveLength(0); // neither alert nor review POST called!
+  });
+
+  it("non-image upload skips immediately without creating audit entry", async () => {
+    const t = setup();
+    const docEvent: Event = {
+      id: "doc1:new",
+      type: "scan.uploaded",
+      mediaId: "doc1",
+      doc: { _id: "doc1", file_type: "document" },
+      at: new Date().toISOString(),
+    };
+    const outcome = await t.loop.handle(docEvent);
+    expect(outcome).toBe("skipped");
+    expect(t.audits()).toHaveLength(0); // no audit doc created!
+  });
+
+  it("strips heatmap_data_url and localization from audit tool step", async () => {
+    const t = setup({
+      backendResult: () => ({
+        ok: true,
+        status: 200,
+        data: {
+          analysis: {
+            findings: [],
+            heatmap_data_url: "data:image/png;base64,SECRET_PIXELS",
+            localization: { box: [1, 2] },
+          },
+        },
+      }),
+    });
+    await t.loop.handle(analyzed());
+    const toolStep = t.audits()[0].steps.find((s: any) => s.kind === "tool");
+    expect(toolStep).toBeDefined();
+    const str = JSON.stringify(toolStep);
+    expect(str).not.toContain("SECRET_PIXELS");
+    expect(str).not.toContain("localization");
+  });
+
+  it("attempt counter with exponential backoff caps at 10 attempts then fails", async () => {
+    let attemptsCount = 0;
+    const t = setup({
+      backendResult: () => {
+        attemptsCount++;
+        return { ok: false, status: 503, error: "HTTP 503", retryable: false };
+      },
+    });
+    const e = analyzed();
+    expect(await t.loop.handle(e)).toBe("pending");
+    for (let i = 1; i <= 9; i++) {
+      const futureTime = new Date(Date.now() + 2_000_000 * 1000).toISOString();
+      await t.loop.retryPending(futureTime);
+    }
+    const finalRun = await t.loop.retryPending(new Date(Date.now() + 3_000_000 * 1000).toISOString());
+    expect(finalRun).toBe(1);
+    const lastAudit = t.audits().at(-1);
+    expect(lastAudit.outcome).toBe("failed");
+    expect(lastAudit.reason).toBe("max_attempts");
+    expect(await t.state.drain()).toHaveLength(0); // acked / cleared!
   });
 });

@@ -32,8 +32,9 @@ export class BackendClient {
     this.timeoutMs = o.timeoutMs ?? 30_000;
   }
 
-  async call(method: string, path: string, body?: unknown): Promise<BackendResult> {
+  async call(method: string, path: string, body?: unknown, options?: { timeoutMs?: number }): Promise<BackendResult> {
     const url = `${this.baseUrl}${path}`;
+    const timeoutMs = options?.timeoutMs ?? (path.startsWith("/api/media/analyze") ? 130_000 : this.timeoutMs);
     let status = 0;
     let error = "";
     for (let attempt = 0; attempt <= this.retries; attempt++) {
@@ -44,7 +45,7 @@ export class BackendClient {
           method,
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),
-          signal: AbortSignal.timeout(this.timeoutMs),
+          signal: AbortSignal.timeout(timeoutMs),
         });
         status = resp.status;
         if (resp.ok) {
@@ -63,7 +64,14 @@ export class BackendClient {
         if (status < 500) return { ok: false, status, error, retryable: false };
       } catch (e) {
         status = 0;
+        const isTimeout =
+          (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) ||
+          String(e).toLowerCase().includes("timeout") ||
+          String(e).toLowerCase().includes("abort");
         error = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+        if (method.toUpperCase() === "POST" && isTimeout) {
+          return { ok: false, status: 0, error, retryable: false };
+        }
       }
       if (attempt < this.retries) await new Promise((r) => setTimeout(r, this.backoffMs * (attempt + 1)));
     }

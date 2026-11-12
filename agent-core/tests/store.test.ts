@@ -86,16 +86,35 @@ describe("store", () => {
     expect(Object.keys(db.get("agent_state")!.get("agent-core")).sort()).toEqual(["_id", "stopped"]);
   });
 
-  it("rpc headers", async () => {
+  it("rpc headers and timeout signal", async () => {
     const f = vi.fn(async () => new Response("[]", { status: 200 }));
     await supabaseRpc("http://sb/", "sb_secret_x", f as any)("mc_find", {});
     let [url, init] = f.mock.calls[0] as any;
     expect(url).toBe("http://sb/rest/v1/rpc/mc_find");
     expect(init.headers.apikey).toBe("sb_secret_x");
     expect(init.headers.authorization).toBeUndefined();
+    expect(init.signal).toBeDefined();
     await supabaseRpc("http://sb", "eyJ.a.b", f as any)("mc_find", {});
     init = (f.mock.calls[1] as any)[1];
     expect(init.headers.apikey).toBe("eyJ.a.b");
     expect(init.headers.authorization).toBe("Bearer eyJ.a.b");
+  });
+
+  it("decided markers persist outcome", async () => {
+    const s = new AgentState(new McStore(fakeRpc().rpc));
+    expect(await s.isDecided("ev1")).toBe(false);
+    await s.markDecided("ev1", "executed");
+    expect(await s.isDecided("ev1")).toBe(true);
+  });
+
+  it("drain with dueOnly filters notBefore", async () => {
+    const s = new AgentState(new McStore(fakeRpc().rpc));
+    const now = "2026-01-01T00:00:00.000Z";
+    const future = "2026-01-01T00:02:00.000Z";
+    await s.enqueue({ id: "due" }, now);
+    await s.enqueue({ id: "not_due" }, future);
+    expect(await s.drain()).toHaveLength(2);
+    const due = await s.drain({ dueOnly: true, now });
+    expect(due.map((e) => e.id)).toEqual(["due"]);
   });
 });
