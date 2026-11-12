@@ -54,6 +54,9 @@ const AGENT_ROUTES = [
   { method: "POST", pattern: /^\/api\/ml\/sepsis\/score$/ },
   { method: "GET", pattern: new RegExp(`^/api/ml/readings/${FILE_ID}$`) },
   { method: "POST", pattern: /^\/api\/intelligence\/rhythm\/classify$/ },
+  { method: "GET", pattern: /^\/api\/pharmacy\/agent\/stock-low$/ },
+  { method: "GET", pattern: /^\/api\/pharmacy\/agent\/stuck-orders$/ },
+  { method: "POST", pattern: /^\/api\/pharmacy\/agent\/refill-suggestion$/ },
 ];
 
 function agentSecret() {

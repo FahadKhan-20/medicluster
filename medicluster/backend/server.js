@@ -55,6 +55,7 @@ app.use("/api/auth",    authRoutes);
 app.use("/api/patient-auth", patientAuthRoutes);
 app.use("/api/pharmacy-auth", pharmacyAuth);
 app.use("/api/courier-auth", courierAuth);
+app.use("/api/pharmacy/agent", requireAuth, require("./routes/pharmacyAgentRoutes"));
 app.use("/api/pharmacy", requirePharmacist, pharmacyRoutes);
 app.use("/api/courier", requireCourier, courierRoutes);
 app.use("/api/sms-gateway", require('./routes/smsGatewayRoutes'));
