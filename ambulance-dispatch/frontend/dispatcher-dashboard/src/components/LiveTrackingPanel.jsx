@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Typography, Collapse } from '@mui/material';
 import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
 import { DEMO_AMBULANCES } from '../data/demoAmbulances';
+import { STATUS_LABELS as SHARED_STATUS_LABELS } from '../services/statusLabels';
 
 /* ── Evergreen tokens ── */
 const G     = '#2563EB';
@@ -21,8 +22,9 @@ const STATUS_COLORS = {
   OFF_DUTY:     'rgba(218,241,222,0.25)',
 };
 const STATUS_LABELS = {
-  AVAILABLE: 'Available', EN_ROUTE: 'En Route', ON_SCENE: 'On Scene',
-  TRANSPORTING: 'Transport', AT_HOSPITAL: 'Hospital', OFF_DUTY: 'Off Duty',
+  ...SHARED_STATUS_LABELS,
+  TRANSPORTING: 'Transport',
+  AT_HOSPITAL: 'Hospital',
 };
 
 // DEMO_AMBULANCES imported from ../data/demoAmbulances

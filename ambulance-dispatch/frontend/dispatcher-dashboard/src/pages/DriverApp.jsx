@@ -11,6 +11,8 @@ import { mobileVars } from '../theme/mobile';
 import { ambulancesApi } from '../services/api';
 import { createCrewLocationPublisher, resolveCrewVehicle } from '../services/crewLocation';
 import { createAssignmentWatcher } from '../services/crewAssignment';
+import DriverMap from '../components/DriverMap';
+import { STATUS_LABELS, statusToStage, getStatusLabel } from '../services/statusLabels';
 
 const MONO = "'IBM Plex Mono', monospace";
 const SERIF = "'Newsreader', Georgia, serif";
@@ -233,6 +235,130 @@ export default function DriverApp() {
     });
   }, [vehicleId, unit.assigned_incident_id, mission?.id, incoming?.call?.id, avail]);
 
+  // ── Authoritative Mission State Derivation ──
+  const fetchAuthoritativeMission = useCallback(async () => {
+    const targetVehId = vehicleId || localStorage.getItem(VEHICLE_KEY);
+    if (!targetVehId) return;
+
+    try {
+      const { data: amb, error: ambErr } = await supabase
+        .from('ambulances')
+        .select('*')
+        .eq('id', targetVehId)
+        .maybeSingle();
+
+      if (ambErr || !amb) return;
+
+      if (amb.assigned_incident_id) {
+        const { data: inc, error: incErr } = await supabase
+          .from('incidents')
+          .select('*')
+          .eq('id', amb.assigned_incident_id)
+          .maybeSingle();
+
+        if (!incErr && inc && !['RESOLVED', 'CANCELLED', 'CLOSED'].includes(inc.status)) {
+          const to = { lat: Number(inc.location_lat), lng: Number(inc.location_lng) };
+          setMission((prev) => ({
+            ...inc,
+            to,
+            distanceKm: km(here, to),
+            acceptedAt: prev?.acceptedAt || Date.now() - 60000,
+          }));
+          const effectiveStatus = amb.status || inc.status;
+          setStage(statusToStage(effectiveStatus));
+          if (inc.assigned_hospital_id) {
+            setHospId(inc.assigned_hospital_id);
+          } else if (amb.assigned_hospital_id) {
+            setHospId(amb.assigned_hospital_id);
+          }
+          return;
+        }
+      }
+
+      // If ambulance row says available or has no assigned incident, reset mission
+      if (['AVAILABLE', 'STANDBY'].includes(amb.status) || !amb.assigned_incident_id) {
+        setMission((prev) => (prev?._isLocalOnly ? prev : null));
+        setStage(1);
+      }
+    } catch (err) {
+      console.warn('[DriverApp] Error fetching authoritative mission:', err);
+    }
+  }, [vehicleId, here]);
+
+  // Initial fetch and Realtime subscription on ambulances row
+  useEffect(() => {
+    const targetVehId = vehicleId || localStorage.getItem(VEHICLE_KEY);
+    if (!targetVehId) return;
+
+    fetchAuthoritativeMission();
+
+    const ambChannel = supabase
+      .channel(`crew_amb_realtime_${targetVehId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ambulances', filter: `id=eq.${targetVehId}` },
+        (payload) => {
+          if (payload.new) {
+            fetchAuthoritativeMission();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ambChannel);
+    };
+  }, [vehicleId, fetchAuthoritativeMission]);
+
+  // Realtime subscription on active incident row
+  useEffect(() => {
+    const incidentId = mission?.id || unit.assigned_incident_id;
+    if (!incidentId) return;
+
+    const incChannel = supabase
+      .channel(`crew_inc_realtime_${incidentId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'incidents', filter: `id=eq.${incidentId}` },
+        (payload) => {
+          if (payload.new) {
+            if (['RESOLVED', 'CANCELLED'].includes(payload.new.status)) {
+              setMission(null);
+              setStage(1);
+            } else {
+              setMission((prev) => (prev ? { ...prev, ...payload.new } : payload.new));
+              setStage(statusToStage(payload.new.status));
+              if (payload.new.assigned_hospital_id) {
+                setHospId(payload.new.assigned_hospital_id);
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(incChannel);
+    };
+  }, [mission?.id, unit.assigned_incident_id]);
+
+  // Refetch on focus and network reconnect
+  useEffect(() => {
+    const handleSync = () => {
+      refreshAmbulances();
+      fetchAuthoritativeMission();
+    };
+    window.addEventListener('focus', handleSync);
+    window.addEventListener('online', handleSync);
+    const handleVis = () => { if (!document.hidden) handleSync(); };
+    document.addEventListener('visibilitychange', handleVis);
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      window.removeEventListener('online', handleSync);
+      document.removeEventListener('visibilitychange', handleVis);
+    };
+  }, [refreshAmbulances, fetchAuthoritativeMission]);
+
   // Response countdown.
   useEffect(() => {
     if (!incoming) return undefined;
@@ -278,7 +404,7 @@ export default function DriverApp() {
     return hospitals.map((h) => ({ ...h, d: km(scene, { lat: h.latitude, lng: h.longitude }) }))
       .sort((a, b) => (a.d ?? 99) - (b.d ?? 99)).slice(0, 3);
   }, [hospitals, mission]);
-  const dest = hospRows.find((h) => h.id === hospId) || hospRows.find((h) => (h.available_beds ?? 1) > 0) || hospRows[0];
+  const dest = hospitals.find((h) => h.id === hospId) || hospRows.find((h) => h.id === hospId) || hospRows.find((h) => (h.available_beds ?? 1) > 0) || hospRows[0];
 
   const next = async () => {
     const step = NEXT[stage];
@@ -386,7 +512,12 @@ export default function DriverApp() {
               <Box component="button" type="button" role="radio" aria-checked={avail} onClick={() => setAvail(true)} sx={seg(avail)}>Available</Box>
               <Box component="button" type="button" role="radio" aria-checked={!avail} onClick={() => setAvail(false)} sx={seg(!avail)}>On break</Box>
             </Box>
-            <MapPanel label={here ? `${here.lat.toFixed(4)}, ${here.lng.toFixed(4)}` : 'LOCATING…'} />
+            <Box sx={{ position: 'relative', height: 190, border: '1px solid var(--bd)', borderRadius: '3px', overflow: 'hidden' }}>
+              <DriverMap
+                driverPos={here}
+                missionStatus={avail ? 'AVAILABLE' : 'OFFLINE'}
+              />
+            </Box>
             <Strip items={[['ON SHIFT', hm(now - shiftStart)], ['CALLS', String(calls.length)], ['BATTERY', unit.battery_level != null ? `${unit.battery_level}%` : '—']]} />
             <Box component="button" type="button" onClick={() => setTab('radio')}
               sx={{ display: 'flex', flexDirection: 'column', gap: '4px', py: '14px', px: 0, border: 0, borderTop: '1px solid var(--tx)', borderBottom: '1px solid var(--bd)', background: 'transparent', color: 'var(--tx)', font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
@@ -402,8 +533,14 @@ export default function DriverApp() {
         {/* ── Mission ── */}
         {tab === 'duty' && mission && (
           <>
-            <MapPanel route height={210} link={mapsUrl(target)}
-              label={toDest && dest ? `TO ${dest.name.split(/[,-]/)[0].toUpperCase()}` : `TO ${String(mission.location_address || 'SCENE').split(',')[0].toUpperCase()}`} />
+            <Box sx={{ position: 'relative', height: 210, border: '1px solid var(--bd)', borderRadius: '3px', overflow: 'hidden' }}>
+              <DriverMap
+                driverPos={here}
+                incident={mission ? { location_lat: mission.to?.lat ?? mission.location_lat, location_lng: mission.to?.lng ?? mission.location_lng, incident_type: mission.incident_type } : null}
+                missionStatus={stage === 1 ? 'EN_ROUTE_TO_SCENE' : stage === 2 ? 'ON_SCENE' : stage === 3 ? 'TRANSPORTING_TO_HOSPITAL' : stage === 4 ? 'ARRIVED_AT_HOSPITAL' : 'STANDBY'}
+                hospital={dest ? { latitude: dest.latitude, longitude: dest.longitude, name: dest.name } : null}
+              />
+            </Box>
             <Strip items={[
               ['ETA', stage === 2 ? 'Arrived' : dist != null ? `${etaMin(dist)} min` : '—'],
               ['DISTANCE', dist != null ? `${dist.toFixed(1)} km` : '—'],

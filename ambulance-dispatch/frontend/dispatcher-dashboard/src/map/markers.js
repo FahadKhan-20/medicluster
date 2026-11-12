@@ -14,7 +14,7 @@ const STATUS_COLORS = {
   OFFLINE: '#94A3B8',
 };
 const SEVERITY_COLORS = { CRITICAL: '#DC2626', HIGH: '#EA580C', MEDIUM: '#D97706', LOW: '#0891B2' };
-const STALE_AFTER_MS = 120000;
+const STALE_AFTER_MS = 60000;
 
 // White glyphs drawn in a 24×24 box. `accent` is used for details cut into the glyph.
 const GLYPHS = {
