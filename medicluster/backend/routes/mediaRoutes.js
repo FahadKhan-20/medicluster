@@ -6,6 +6,7 @@ const axios = require("axios");
 const { execFile } = require("child_process");
 const path = require("path");
 const PatientMedia = require("../models/PatientMedia");
+const User = require("../models/User");
 const SystemConfig = require("../models/SystemConfig");
 const brainMri = require("../services/brainMri");
 const { requireAuth, requirePatientOrClinician, canAccessPatient } = require("../middleware/auth");
@@ -204,6 +205,176 @@ router.get("/models", async (_req, res, next) => {
       ],
       default: "densenet121-res224-all",
     });
+  }
+});
+
+// ── Imaging Datasets Library (Staff Only) ────────────────────────────────────
+
+function requireStaff(req, res, next) {
+  if (req.session?.kind !== 'clinician') {
+    return res.status(403).json({ error: 'Clinician staff access required' });
+  }
+  next();
+}
+
+async function requireDoctorOrAdmin(req, res, next) {
+  if (req.session?.kind !== 'clinician') {
+    return res.status(403).json({ error: 'Clinician staff access required' });
+  }
+  try {
+    const user = await User.findById(req.session.userId);
+    const role = String(user?.role || '').toLowerCase();
+    if (!['admin', 'doctor', 'physician'].includes(role)) {
+      return res.status(403).json({ error: 'Doctor or admin role required for benchmarking' });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/media/datasets
+router.get("/datasets", requireStaff, async (req, res, next) => {
+  try {
+    const upstream = await axios.get(`${IMAGING_ENGINE_URL}/datasets`, { timeout: 10_000 });
+    res.json(upstream.data);
+  } catch (err) {
+    if (err.response) return res.status(err.response.status).json(err.response.data);
+    res.status(503).json({ error: "Imaging dataset service unavailable" });
+  }
+});
+
+// GET /api/media/datasets/:name/samples
+router.get("/datasets/:name/samples", requireStaff, async (req, res, next) => {
+  try {
+    const params = new URLSearchParams();
+    if (req.query.class) params.set("class", String(req.query.class));
+    if (req.query.split) params.set("split", String(req.query.split));
+    if (req.query.limit) params.set("limit", String(req.query.limit));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+
+    const upstream = await axios.get(
+      `${IMAGING_ENGINE_URL}/datasets/${encodeURIComponent(req.params.name)}/samples${qs}`,
+      { timeout: 15_000 }
+    );
+    res.json(upstream.data);
+  } catch (err) {
+    if (err.response) return res.status(err.response.status).json(err.response.data);
+    res.status(503).json({ error: "Imaging dataset service unavailable" });
+  }
+});
+
+// GET /api/media/datasets/:name/image/:id
+router.get("/datasets/:name/image/:id", requireStaff, async (req, res, next) => {
+  try {
+    const upstream = await axios.get(
+      `${IMAGING_ENGINE_URL}/datasets/${encodeURIComponent(req.params.name)}/image/${encodeURIComponent(req.params.id)}`,
+      { responseType: "arraybuffer", timeout: 15_000 }
+    );
+    res.set("Content-Type", upstream.headers["content-type"] || "image/jpeg");
+    res.set("Cache-Control", "public, max-age=86400");
+    res.send(Buffer.from(upstream.data));
+  } catch (err) {
+    if (err.response) return res.status(err.response.status).json(err.response.data);
+    res.status(503).json({ error: "Imaging dataset service unavailable" });
+  }
+});
+
+// GET /api/media/datasets/:name/thumbnail/:id
+router.get("/datasets/:name/thumbnail/:id", requireStaff, async (req, res, next) => {
+  try {
+    const upstream = await axios.get(
+      `${IMAGING_ENGINE_URL}/datasets/${encodeURIComponent(req.params.name)}/thumbnail/${encodeURIComponent(req.params.id)}`,
+      { responseType: "arraybuffer", timeout: 15_000 }
+    );
+    res.set("Content-Type", upstream.headers["content-type"] || "image/jpeg");
+    res.set("Cache-Control", "public, max-age=86400");
+    res.send(Buffer.from(upstream.data));
+  } catch (err) {
+    if (err.response) return res.status(err.response.status).json(err.response.data);
+    res.status(503).json({ error: "Imaging dataset service unavailable" });
+  }
+});
+
+// POST /api/media/datasets/:name/benchmark (admin/doctor)
+router.post("/datasets/:name/benchmark", requireDoctorOrAdmin, async (req, res, next) => {
+  try {
+    const upstream = await axios.post(
+      `${IMAGING_ENGINE_URL}/datasets/${encodeURIComponent(req.params.name)}/benchmark`,
+      req.body || {},
+      { timeout: 180_000 }
+    );
+    res.json(upstream.data);
+  } catch (err) {
+    if (err.response) return res.status(err.response.status).json(err.response.data);
+    res.status(503).json({ error: "Imaging benchmark service unavailable" });
+  }
+});
+
+// POST /api/media/datasets/:name/analyze/:id
+router.post("/datasets/:name/analyze/:id", requireStaff, async (req, res, next) => {
+  try {
+    const upstream = await axios.post(
+      `${IMAGING_ENGINE_URL}/datasets/${encodeURIComponent(req.params.name)}/analyze/${encodeURIComponent(req.params.id)}`,
+      req.body || {},
+      { timeout: 30_000 }
+    );
+    res.json(upstream.data);
+  } catch (err) {
+    if (err.response) return res.status(err.response.status).json(err.response.data);
+    res.status(503).json({ error: "Imaging dataset analyze service unavailable" });
+  }
+});
+
+// POST /api/media/datasets/:name/import/:id { patientId } (only for patientId starting with DEMO-)
+router.post("/datasets/:name/import/:id", requireStaff, async (req, res, next) => {
+  try {
+    const { patientId } = req.body || {};
+    if (!patientId || typeof patientId !== "string" || !patientId.startsWith("DEMO-")) {
+      return res.status(400).json({ error: "patientId is required and must start with DEMO-" });
+    }
+
+    let imgRes;
+    try {
+      imgRes = await axios.get(
+        `${IMAGING_ENGINE_URL}/datasets/${encodeURIComponent(req.params.name)}/image/${encodeURIComponent(req.params.id)}`,
+        { responseType: "arraybuffer", timeout: 20_000 }
+      );
+    } catch (fetchErr) {
+      if (fetchErr.response && fetchErr.response.status === 404) {
+        return res.status(404).json({ error: "Dataset sample not found" });
+      }
+      return res.status(503).json({ error: "Failed to fetch dataset sample image" });
+    }
+
+    const imageBuffer = Buffer.from(imgRes.data);
+    const mimetype = imgRes.headers["content-type"] || "image/jpeg";
+    const fileId = createId();
+    const storageKey = mediaStorage.storageKeyFor(fileId);
+
+    await mediaStorage.uploadObject(storageKey, imageBuffer, mimetype);
+
+    let media;
+    try {
+      media = await PatientMedia.create({
+        patient_id: patientId,
+        original_name: `${req.params.name}_${req.params.id}.jpg`,
+        mimetype,
+        size: imageBuffer.length,
+        file_type: "image",
+        gridfs_id: fileId,
+        storageKey,
+      });
+    } catch (saveErr) {
+      try {
+        await mediaStorage.deleteObject({ gridfs_id: fileId, storageKey });
+      } catch {}
+      throw saveErr;
+    }
+
+    res.status(201).json(media);
+  } catch (err) {
+    next(err);
   }
 });
 

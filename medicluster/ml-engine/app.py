@@ -69,7 +69,10 @@ from risk.advanced_risk import (
     population_risk_intelligence,
 )
 
+from datasets.service import datasets_bp
+
 app = Flask(__name__)
+app.register_blueprint(datasets_bp)
 CORS(app)  # Allow requests from Node backend and frontend
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
