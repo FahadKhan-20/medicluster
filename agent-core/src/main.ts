@@ -10,6 +10,7 @@ import { BackendClient } from "./tools/backend.js";
 import { EventSource, realtimeSubscribe, type Event } from "./events/events.js";
 import { HealthPoller } from "./events/health.js";
 import { AgentLoop } from "./agent/loop.js";
+import { EcgWorkflow } from "./workflows/ecg.js";
 import { createServer } from "./api/server.js";
 import { trackInFlight } from "./lifecycle.js";
 
@@ -38,6 +39,7 @@ async function main(): Promise<void> {
     },
   });
   const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health });
+  const ecgWorkflow = new EcgWorkflow({ jev, llm, audit, state, gate, backend, health });
   const work = trackInFlight();
   const retry = work.wrap(() =>
     loop.retryPending().catch((err) => console.error("[agent-core] retryPending failed", err)),
