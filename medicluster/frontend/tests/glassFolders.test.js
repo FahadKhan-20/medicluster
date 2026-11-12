@@ -63,3 +63,14 @@ test('Crew folder describes Crew web access and keeps published Android availabl
   const androidOnly = product.productFolderFiles({ ...crew, webHref: null }, release);
   assert.deepEqual(androidOnly.map(file => file.name), ['Download Android', 'How to install']);
 });
+
+test('Pharmacy and Courier folders provide direct web app links with role-specific metadata', () => {
+  const pharmacy = { id: 'pharmacy', name: 'Pharmacy portal', webHref: '/pharmacy', android: false };
+  const courier = { id: 'courier', name: 'Courier view', webHref: '/courier', android: false };
+  const pFiles = product.productFolderFiles(pharmacy, null);
+  const cFiles = product.productFolderFiles(courier, null);
+  assert.equal(pFiles.find(f => f.name === 'Open web app').href, '/pharmacy');
+  assert.equal(pFiles.find(f => f.name === 'Open web app').meta, 'Pharmacy portal');
+  assert.equal(cFiles.find(f => f.name === 'Open web app').href, '/courier');
+  assert.equal(cFiles.find(f => f.name === 'Open web app').meta, 'Courier view');
+});

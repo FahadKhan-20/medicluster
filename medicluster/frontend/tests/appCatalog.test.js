@@ -12,6 +12,9 @@ test('gives every role its own destination and patients and crews their own Andr
   assert.equal(apps[4].webHref, '/pharmacy');
   assert.equal(apps[5].webHref, '/courier');
   assert.deepEqual(apps.filter(a => a.android).map(a => a.id), ['patient', 'crew']);
+  assert.equal(apps.find(a => a.id === 'pharmacy').icon, 'pill');
+  assert.equal(apps.find(a => a.id === 'courier').icon, 'truck');
+  assert.ok(apps.every(a => a.name && a.description && a.icon));
 });
 
 test('production never directs visitors to localhost, insecure sites, or injected schemes', () => {

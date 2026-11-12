@@ -9,6 +9,8 @@ const CONTENT = [
   { id: "patient", title: "Patient app", detail: "EVERYDAY CARE · MEDICINES · HEALTH READINGS", image: "everyday", alt: "A stethoscope resting on soft fabric in natural light" },
   { id: "dispatch", title: "Dispatch dashboard", detail: "DISPATCH · INCIDENTS · FLEET COORDINATION", image: "response", alt: "A prepared hospital operating room with monitoring equipment" },
   { id: "crew", title: "Crew app", detail: "AMBULANCE CREWS · CALLS · PATIENT HANDOVER", image: "team", alt: "A medical team gathered around an operating-room light" },
+  { id: "pharmacy", title: "Pharmacy portal", detail: "PHARMACY OPS · DISPENSING · STOCK INVENTORY", image: "clinical", alt: "Medication dispensary and clinical pharmacy verification" },
+  { id: "courier", title: "Courier view", detail: "LAST-MILE COURIER · LIVE GPS · HANDOVER OTP", image: "response", alt: "Last-mile medical delivery tracking and live GPS handover" },
 ];
 
 export default function WorkspaceShowcase({ apps, paused = false }: { apps: ProductApp[]; paused?: boolean }) {
@@ -18,7 +20,7 @@ export default function WorkspaceShowcase({ apps, paused = false }: { apps: Prod
     <div className="mc-container">
       <div className="mc-workspaces-heading" data-reveal>
         <div><p className="mc-section-label">Explore the platform</p><h2 id="workspace-showcase-title">A workspace for every part of care.</h2></div>
-        <p>Four ways in. One connected platform.<br />Find the space made for your day.</p>
+        <p>Six workspaces. One connected platform.<br />Find the space made for your day.</p>
       </div>
       <div className="mc-workspace-grid">
         {CONTENT.map(item => {

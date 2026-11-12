@@ -34,6 +34,9 @@
 | **👤 Patients** | Web Portal (`:3000/app`) + Native APK | Clinic OTP/SSO login, records history, appointments, live vitals |
 | **🚨 Dispatchers** | CAD Operations Console (`:5174`) | Real-time map tracking, automated unit recommendation, GPS dispatch |
 | **🚑 Crews** | Dedicated Android APK + Web (`:5174/#/driver`) | Employee ID/PIN auth, turn-by-turn routing, pre-hospital vitals transfer |
+| **💊 Pharmacists** | Pharmacy Web Portal (`:3000/pharmacy`) | Prescription dispensing queue, verification state machine, conflict detection, stock & inventory management |
+| **🚴 Couriers** | Courier Web View (`:3000/courier`) | Phone/PIN auth, turn-by-turn Leaflet OSM map, live GPS stream, 4-digit OTP handover verification |
+| **🤖 Autonomous Agent** | MediCluster Agent Console (`:3000/agent`, Core `:8100`) | Autonomous AI agent operating across all 6 apps (imaging, alerts, reminders, radar, sepsis, ECG, Code Blue war room, dispatch, pharmacy ops, self-heal). Jev decides, Gemini executes, kill switch, Decision Replay audit. *Treatment actions are always clinician-confirmed.* |
 
 ---
 
@@ -97,10 +100,13 @@ flowchart TD
     classDef ai fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#6b21a8;
 
     subgraph Clients["Applications & Roles"]
-        C1["Clinician Dashboard<br/>React 18"]:::client
-        C2["Patient App & APK<br/>Web + Android"]:::client
-        C3["Dispatcher CAD<br/>Vite + Leaflet"]:::client
-        C4["Crew App & APK<br/>Native Android"]:::client
+        C1["Clinician Dashboard<br/>React 18 (:3000)"]:::client
+        C2["Patient App & APK<br/>Web + Android (:3000/app)"]:::client
+        C3["Dispatcher CAD<br/>Vite + Leaflet (:5174)"]:::client
+        C4["Crew App & APK<br/>Native Android (:5174/#/driver)"]:::client
+        C5["Pharmacy Portal<br/>Web (:3000/pharmacy)"]:::client
+        C6["Courier View<br/>Web (:3000/courier)"]:::client
+        C7["MediCluster Agent<br/>Autonomous Console (:3000/agent)"]:::ai
     end
 
     subgraph CoreServices["Backend & Realtime"]
@@ -179,13 +185,21 @@ flowchart LR
 
 ### Service Registry & Ports
 
-| Component | Directory | Port | Command |
+| Component | Directory | Port | Command / Access URL |
 | :--- | :--- | :--- | :--- |
 | **ML Engine** | `medicluster/ml-engine` | `:8080` | `source venv/bin/activate && python app.py` |
 | **Backend API** | `medicluster/backend` | `:5000` | `npm run dev` |
-| **Web Frontend** | `medicluster/frontend` | `:3000` | `npm run dev` |
-| **Dispatch CAD** | `ambulance-dispatch/frontend/dispatcher-dashboard` | `:5174` | `npm run dev` |
+| **Web Frontend** | `medicluster/frontend` | `:3000` | `npm run dev` (`/login`, `/app`, `/pharmacy`, `/courier`, `/agent`) |
+| **Agent Core** | `medicluster-agent-core` | `:8100` | `python -m uvicorn agent_core.main:app --port 8100` |
+| **Dispatch CAD** | `ambulance-dispatch/frontend/dispatcher-dashboard` | `:5174` | `npm run dev` (`/#/login`, `/#/driver/login`) |
 | **Dispatch API** | `ambulance-dispatch/backend/api` | `:5001` | `npm start` |
+
+> [!NOTE]
+> **Validated Clinical Metrics & Safety Boundary**:
+> - ECG rhythm classification macro-AUC: **0.906**
+> - Arrest-rhythm detection F1: **0.88**
+> - Multi-parameter sepsis risk AUROC: **0.77**
+> - **Treatment actions are always clinician-confirmed**: The autonomous agent coordinates, monitors, and prepares interventions, but all therapeutic prescriptions and treatment actions require human clinician approval before execution.
 
 ### 1. Backend & ML Setup
 
@@ -213,7 +227,7 @@ npm run dev
 ```
 
 > [!TIP]
-> Access points: Clinicians at `http://localhost:3000/login`, Patients at `http://localhost:3000/app`.
+> Access points: Clinicians at `http://localhost:3000/login`, Patients at `http://localhost:3000/app`, Pharmacists at `http://localhost:3000/pharmacy`, Couriers at `http://localhost:3000/courier`, Agent at `http://localhost:3000/agent`.
 
 ---
 

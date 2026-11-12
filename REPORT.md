@@ -93,3 +93,74 @@ The implementation adheres strictly to sections 4.1–4.5 of `docs/superpowers/s
 
 ### 3. Production Build (`npm run build`)
 - Successfully transformed 3654 modules into production bundles with code splitting for `PharmacyPortal` and `CourierPortal` (exit code 0).
+
+
+---
+
+# Website & Unified App Catalog Implementation Report (`website`)
+
+## Summary
+Successfully updated the public website, landing portal, download experience, and documentation across MediCluster (`medicluster/frontend` and `ambulance-dispatch/frontend/dispatcher-dashboard`) in worktree `/home/vinay/mc3-rxportal` on branch `par3/rxportal`.
+
+All 6 applications across the health continuum are consistently listed and presented alongside the autonomous **MediCluster Agent**:
+1. **MediCluster** (Clinician web dashboard - `/login`)
+2. **Patient App** (Web portal `/app` + native Android APK)
+3. **Dispatch Center** (CAD Operations Console - `:5174/#/login`)
+4. **Crew App** (Mobile-friendly web `/#/driver/login` + native Android APK)
+5. **Pharmacy Portal** (Dispensing queue & stock management - `/pharmacy`)
+6. **Courier View** (Deliveries, Leaflet OSM map, live GPS & OTP handover - `/courier`)
++ **MediCluster Agent** (Autonomous AI console - `/agent`, Core `:8100`)
+
+---
+
+## Deliverables & Updates
+
+### 1. Unified App Catalog & Navigation (`src/data/appCatalog.js`, `src/navigation.js`)
+- Full 6-app enumeration in `buildAppCatalog()` with dedicated icons:
+  - `clinic` (Stethoscope) for MediCluster
+  - `heart` (HeartPulse) for Patient App
+  - `route` (RadioTower) for Dispatch Center
+  - `ambulance` (Ambulance) for Crew App
+  - `pill` (Pill) for Pharmacy Portal
+  - `truck` / `bike` for Courier View
+- Clinical navigation sidebar updated with `/agent` under AI and `/pharmacy`, `/courier` under Operations.
+
+### 2. Autonomous Agent Showcase (`components/download/AgentSpotlight.tsx`)
+- Dedicated landing section `#agent` detailing:
+  - Autonomous AI operations across imaging, alerts, reminders, deterioration radar, sepsis surveillance, ECG rhythm triage, Code Blue war room, dispatch, pharmacy ops, and self-heal.
+  - Dual-layer intelligence: Jev policy decisions + Gemini multi-modal tool execution.
+  - Safety controls: Instant software/hardware kill switch and immutable audit trail for retrospective Decision Replay.
+  - Explicit clinical safety guarantee: **Treatment actions are always clinician-confirmed**.
+  - Direct link to staff Agent console (`/agent`).
+
+### 3. Public Download & Landing Portals
+- `DownloadPage.jsx` & `download-page.css`:
+  - Added navigation anchors (`#pharmacy`, `#courier`, `#agent`) in top menu and role strip.
+  - Integrated `AgentSpotlight`.
+  - Added styling for the clinical safety callout box (`.mc-agent-safety-box`).
+- `ApplicationSelector.tsx`: Full tabbed access for all 6 apps with icons and role-specific web and Android actions.
+- `PlatformReel.tsx`: Updated platform introduction copy connecting clinicians, patients, dispatchers, crews, pharmacists, and couriers.
+- `WorkspaceShowcase.tsx`: Expanded to 6 workspace cards covering clinical, patient, dispatch, crew, pharmacy, and courier.
+- `ProductFolderCard.tsx`: Added art presets and file representations for Pharmacy (`dusk`) and Courier (`ember`).
+- `LandingSections.tsx`: Updated FAQ (Q1, Q2, Q4) and added Q5 explaining the MediCluster Agent; updated footer with all workspace links.
+- `AccessGuide.jsx`: Updated in both `medicluster/frontend` and `ambulance-dispatch/frontend/dispatcher-dashboard` with pharmacist and courier sign-in credentials and destination links.
+- `README.md`: Updated ecosystem table, architecture diagram, port registry, validated clinical benchmarks (ECG macro-AUC 0.906, arrest-rhythm F1 0.88, sepsis AUROC 0.77), and clinician confirmation guarantee.
+
+---
+
+## Verification & Test Results
+
+### 1. Unit Tests (`node --test tests/*.test.js`)
+- Catalog assertions updated for all 6 destinations and icon mappings (`tests/appCatalog.test.js`).
+- Glass folder file assertions for pharmacy and courier metadata (`tests/glassFolders.test.js`).
+- Result: **72 passed, 0 failed** (2.02s).
+
+### 2. Playwright E2E Browser Tests
+- `tests/browser/landing-motion.spec.js` (4 passed, 12.6s).
+- `tests/browser/workspace-cards.spec.js` (6 passed).
+- `tests/browser/apk-download.spec.js` (1 passed).
+- `tests/browser/pharmacy-courier.spec.js` (3 passed).
+- Total suite: **14 passed, 0 failed** (57.2s).
+
+### 3. Production Build (`npm run build`)
+- Successfully transformed 3655 modules and built production assets with code splitting (exit code 0).

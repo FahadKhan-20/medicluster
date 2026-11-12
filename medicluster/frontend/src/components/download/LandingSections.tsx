@@ -389,7 +389,9 @@ export function LandingFAQ({
           </summary>
           <p>
             Clinicians use MediCluster. Patients use the Patient app.
-            Dispatchers and ambulance crews have their own workspaces.
+            Dispatchers and ambulance crews coordinate emergency response.
+            Pharmacists dispense orders and manage inventory in the Pharmacy portal,
+            and couriers handle deliveries and GPS verification in the Courier view.
           </p>
         </details>
         <details>
@@ -398,9 +400,9 @@ export function LandingFAQ({
             <Plus size={20} aria-hidden="true" />
           </summary>
           <p>
-            Yes. The Patient and Crew apps are available for Android 8.0 and later. Web
-            apps also work in your browser, including Safari on iPhone. An
-            internet connection is required.
+            Yes. The Patient and Crew apps are available as native Android apps (Android 8.0+).
+            The MediCluster clinician dashboard, Dispatch center, Pharmacy portal, and Courier view
+            run in any modern mobile or desktop browser with an internet connection.
           </p>
         </details>
         <details
@@ -433,9 +435,19 @@ export function LandingFAQ({
             <Plus size={20} aria-hidden="true" />
           </summary>
           <p>
-            Patients sign in with a mobile number and code. Clinicians and
+            Patients sign in with a mobile number and text code. Clinicians and
             dispatchers use their account email and password. Ambulance crews
-            use an employee ID and PIN.
+            use an employee ID and PIN. Pharmacists sign in with their pharmacy account
+            email and password, and couriers use their registered phone number and 4-digit PIN.
+          </p>
+        </details>
+        <details>
+          <summary>
+            <span>05</span>What is the MediCluster Agent?
+            <Plus size={20} aria-hidden="true" />
+          </summary>
+          <p>
+            The MediCluster Agent is an autonomous AI agent operating across all six apps (imaging, alerts, reminders, deterioration radar, sepsis surveillance, ECG rhythm triage, Code Blue war room, dispatch, pharmacy ops, and service self-heal). Jev decides, Gemini executes, backed by a hardware/software kill switch and full Decision Replay audit logging. Treatment actions are always clinician-confirmed before execution.
           </p>
         </details>
       </div>
@@ -465,6 +477,9 @@ export function LandingFooter({ onInstall }: { onInstall: () => void }) {
             <span>Your workspace</span>
             <a href="/login">Clinician login</a>
             <a href="/app">Patient portal</a>
+            <a href="/pharmacy">Pharmacy portal</a>
+            <a href="/courier">Courier view</a>
+            <a href="/agent">MediCluster Agent</a>
           </nav>
           <nav aria-label="Get started">
             <span>Get started</span>
