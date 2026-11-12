@@ -24,6 +24,7 @@ export const NAV_GROUPS = [
   { label: "AI", items: [
     { to: "/ask-ai",      label: "CliniQ" },
     { to: "/clinical-ai", label: "Clinical AI" },
+    { to: "/agent",       label: "Agent" },
   ] },
   { label: "Operations", items: [
     { to: "/hospitals", label: "Hospitals" },

@@ -11,6 +11,7 @@ import RemindersPage from "./pages/RemindersPage";
 import AskAIPage from "./pages/AskAIPage";
 import NearbyHospitalsPage from "./pages/NearbyHospitalsPage";
 import ClinicalAIPage from "./pages/ClinicalAIPage";
+import AgentPage from "./pages/AgentPage";
 
 const BrainExplorerPage = lazy(() => import("./pages/BrainExplorerPage"));
 const DeteriorationRadarPage = lazy(() => import("./pages/DeteriorationRadarPage"));
@@ -37,6 +38,7 @@ export default function ClinicalWorkspace() {
           <Route path="/ml-tools" element={<Navigate to="/dashboard" replace />} />
           <Route path="/hospitals" element={<NearbyHospitalsPage />} />
           <Route path="/clinical-ai" element={<ClinicalAIPage />} />
+          <Route path="/agent" element={<AgentPage />} />
         </Routes>
         </Suspense>
       </AppShell>

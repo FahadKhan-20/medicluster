@@ -12,7 +12,7 @@ const UserSchema = defineSchema(
     email:        { type: String, required: true, unique: true, lowercase: true, trim: true },
     name:         { type: String, required: true, trim: true },
     passwordHash: { type: String, required: true, select: false },
-    role:         { type: String, enum: [...ROLES, null], default: null },
+    role:         { type: String, enum: [...ROLES, "admin", "doctor", null], default: null },
     department:   { type: String, default: "" },
     onboardedAt:  { type: Date, default: null },
   },

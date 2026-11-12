@@ -23,7 +23,9 @@ function secret() {
 const PATIENT_TOKEN_TTL = "30d";
 
 function signToken(user) {
-  return jwt.sign({ sub: String(user._id) }, secret(), { expiresIn: TOKEN_TTL });
+  const payload = { sub: String(user._id || user.id) };
+  if (user.role) payload.role = user.role;
+  return jwt.sign(payload, secret(), { expiresIn: TOKEN_TTL });
 }
 
 // Patient sessions (mobile app) carry kind "patient" and only grant access to that patient's own data.
@@ -74,7 +76,7 @@ function readSession(req) {
     const p = jwt.verify(token, key);
     // Agent identity only exists under AGENT_JWT_SECRET; never honour it under the user secret.
     if (p.kind === "agent") return null;
-    return p.kind === "patient" ? { kind: "patient", patientId: p.sub } : { kind: "clinician", userId: p.sub };
+    return p.kind === "patient" ? { kind: "patient", patientId: p.sub } : { kind: "clinician", userId: p.sub, role: p.role };
   } catch {
     // fall through to the agent secret
   }
@@ -107,7 +109,43 @@ async function requireAuth(req, res, next) {
     if (!await allowedClinicianSession(session)) return res.status(403).json({ error: "This account isn't enabled for clinician access" });
   } catch (err) { return next(err); }
   req.userId = session.userId;
+  req.userRole = session.role;
   return next();
+}
+
+function requireRole(allowedRoles) {
+  const allowed = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles]).map(r => String(r).toLowerCase());
+  return async (req, res, next) => {
+    let user = req.user;
+    if (!user && req.userId) {
+      user = await User.findById(req.userId).lean().catch(() => null);
+    }
+    if (!user && req.session) {
+      user = req.session;
+    }
+    if (!user && req.userId) {
+      user = { _id: req.userId, role: req.userRole };
+    }
+    if (!user) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    req.user = user;
+    const rawRole = String(user.role || req.userRole || req.session?.role || "").toLowerCase();
+
+    const isAdmin = rawRole === "admin" || rawRole === "administrator";
+    const isDoctor = rawRole === "doctor" || rawRole === "physician";
+
+    const hasPermission = allowed.some(a => {
+      if (a === "admin") return isAdmin;
+      if (a === "doctor" || a === "physician") return isDoctor || isAdmin;
+      return rawRole === a;
+    });
+
+    if (!hasPermission) {
+      return res.status(403).json({ error: "Forbidden: insufficient permissions" });
+    }
+    next();
+  };
 }
 
 // Clinicians, or the signed-in patient. Use canAccessPatient(req, id) to check a specific record.
@@ -134,4 +172,4 @@ async function allowedClinicianSession(session) {
 const canAccessPatient = (req, patientId) =>
   req.session?.kind === "clinician" || (req.session?.kind === "patient" && req.session.patientId === patientId);
 
-module.exports = { signToken, signPatientToken, signAgentToken, AGENT_ROUTES, requireAuth, requirePatientOrClinician, canAccessPatient };
+module.exports = { signToken, signPatientToken, signAgentToken, AGENT_ROUTES, requireAuth, requireRole, requirePatientOrClinician, canAccessPatient };

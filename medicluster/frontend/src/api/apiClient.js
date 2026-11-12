@@ -623,4 +623,24 @@ export async function askPatients(query, patients = null) {
   return res.data;
 }
 
+/** Agent Core status and service health. */
+export async function getAgentHealth() {
+  const res = await api.get("/agent/health");
+  return res.data;
+}
+
+/** Agent Core audit log stream. */
+export async function getAgentAudits(limit = 50, since) {
+  const params = { limit };
+  if (since) params.since = since;
+  const res = await api.get("/agent/audit", { params });
+  return res.data;
+}
+
+/** Agent kill switch (stop / start). */
+export async function controlAgent(action) {
+  const res = await api.post(`/agent/control/${action}`);
+  return res.data;
+}
+
 export default api;
