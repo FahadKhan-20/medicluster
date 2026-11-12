@@ -1,0 +1,5 @@
+threshold: 0.9
+groups:
+  imaging: auto
+  alerts: auto
+rate_limit_per_minute: 30
