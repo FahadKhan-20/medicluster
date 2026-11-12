@@ -10,6 +10,7 @@ import { BackendClient } from "./tools/backend.js";
 import { EventSource, realtimeSubscribe, type Event } from "./events/events.js";
 import { HealthPoller } from "./events/health.js";
 import { AgentLoop } from "./agent/loop.js";
+import { registerSelfheal } from "./selfheal/index.js";
 import { createServer } from "./api/server.js";
 import { trackInFlight } from "./lifecycle.js";
 
@@ -54,6 +55,7 @@ async function main(): Promise<void> {
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   log(`listening on ${config.port}`);
 
+  registerSelfheal(health, { jev, llm, audit, state, gate, backend, work });
   policyStore.watch();
   await health.start((e: Event) => {
     if (e.type === "service.up") void retry();
