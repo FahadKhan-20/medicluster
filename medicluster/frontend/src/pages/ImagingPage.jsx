@@ -9,6 +9,7 @@ import { Page, linkCls } from "../components/ui";
 import { BRAIN_CLASSES, BRAIN_MRI_MODEL_ID, CHEST_DETECTOR_MODEL_ID, acceptsImagingFile, hasImagingAnalysis, imagingSummary } from "../utils/imagingModels";
 
 import ImagingDetectionOverlay from "../components/ImagingDetectionOverlay";
+import ImagingDatasets from "../components/ImagingDatasets";
 import { createAnalysisCoordinator } from "../utils/imagingAnalysis";
 import "./imaging-page.css";
 
@@ -71,6 +72,7 @@ function PagedText({ text }) {
 }
 
 export default function ImagingPage() {
+  const [activeTab, setActiveTab] = useState("viewer");
   const [resultTab, setResultTab] = useState("summary");
   const [mobileView, setMobileView] = useState("image");
   const [imagePage, setImagePage] = useState(0);
@@ -311,17 +313,44 @@ export default function ImagingPage() {
     <Page
       className="imaging-page"
       title="Imaging"
-      sub="Upload chest X-rays for automatic finding detection, or select a classifier for chest images and brain MRI slices."
-      actions={findings && (
-        <button type="button" className="btn-secondary h-9 text-sm"
-          onClick={exportReport}>
-          Export PDF
-        </button>
-      )}
+      sub="Upload chest X-rays and brain MRIs for clinical finding detection, or explore benchmarked reference datasets."
+      actions={
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div role="tablist" aria-label="Imaging section" className="flex border border-line-strong rounded-[3px] overflow-hidden">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "viewer"}
+              onClick={() => setActiveTab("viewer")}
+              className={`h-8 px-3 text-[13px] ${activeTab === "viewer" ? "bg-ink text-paper" : "text-slate-600 hover:bg-sunken"}`}
+            >
+              Study Viewer
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "datasets"}
+              onClick={() => setActiveTab("datasets")}
+              className={`h-8 px-3 text-[13px] border-l border-line-strong ${activeTab === "datasets" ? "bg-ink text-paper" : "text-slate-600 hover:bg-sunken"}`}
+            >
+              Datasets
+            </button>
+          </div>
+          {activeTab === "viewer" && findings && (
+            <button type="button" className="btn-secondary h-8 text-xs" onClick={exportReport}>
+              Export PDF
+            </button>
+          )}
+        </div>
+      }
     >
-      <input ref={inputRef} type="file" accept={scanType === "brain-mri" ? BRAIN_ACCEPT : ACCEPT} multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
+      {activeTab === "datasets" ? (
+        <ImagingDatasets />
+      ) : (
+        <>
+          <input ref={inputRef} type="file" accept={scanType === "brain-mri" ? BRAIN_ACCEPT : ACCEPT} multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
 
-      <div className="imaging-toolbar">
+          <div className="imaging-toolbar">
         <div className="imaging-toolbar-switch" role="tablist" aria-label="Imaging controls">{["study", "model"].map(tab => <button type="button" role="tab" aria-selected={toolbarTab === tab} key={tab} onClick={() => setToolbarTab(tab)}>{tab === "study" ? "Patient & files" : "Scan & model"}</button>)}</div>
         <form data-toolbar="study" data-active={toolbarTab === "study"} className="flex items-center gap-2 text-slate-600" onSubmit={(e) => { e.preventDefault(); handleLoad(); }}>
           Patient
@@ -499,6 +528,8 @@ export default function ImagingPage() {
           <p className="imaging-disclaimer">Model output supports clinician review; it is not a diagnosis. Verify findings before clinical decisions.</p>
         </section>
       </div>
+        </>
+      )}
     </Page>
   );
 }

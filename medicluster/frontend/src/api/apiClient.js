@@ -297,6 +297,57 @@ export async function listModels() {
 }
 
 /**
+ * Imaging Datasets Library API
+ */
+export async function listImagingDatasets() {
+  const res = await api.get("/media/datasets");
+  return res.data;
+}
+
+export async function listImagingDatasetSamples(datasetName, { className, split, limit } = {}) {
+  const params = {};
+  if (className) params.class = className;
+  if (split) params.split = split;
+  if (limit) params.limit = limit;
+  const res = await api.get(`/media/datasets/${encodeURIComponent(datasetName)}/samples`, { params });
+  return res.data;
+}
+
+export function getImagingDatasetImageUrl(datasetName, sampleId) {
+  return `/api/media/datasets/${encodeURIComponent(datasetName)}/image/${encodeURIComponent(sampleId)}`;
+}
+
+export function getImagingDatasetThumbnailUrl(datasetName, sampleId) {
+  return `/api/media/datasets/${encodeURIComponent(datasetName)}/thumbnail/${encodeURIComponent(sampleId)}`;
+}
+
+export async function runImagingDatasetBenchmark(datasetName, { model, limit, split } = {}) {
+  const res = await api.post(
+    `/media/datasets/${encodeURIComponent(datasetName)}/benchmark`,
+    { model, limit, split },
+    { timeout: 180_000 }
+  );
+  return res.data;
+}
+
+export async function analyzeImagingDatasetSample(datasetName, sampleId, { model } = {}) {
+  const res = await api.post(
+    `/media/datasets/${encodeURIComponent(datasetName)}/analyze/${encodeURIComponent(sampleId)}`,
+    { model },
+    { timeout: 30_000 }
+  );
+  return res.data;
+}
+
+export async function importImagingDatasetSample(datasetName, sampleId, patientId) {
+  const res = await api.post(
+    `/media/datasets/${encodeURIComponent(datasetName)}/import/${encodeURIComponent(sampleId)}`,
+    { patientId }
+  );
+  return res.data;
+}
+
+/**
  * List all saved ClusterResults (id, algorithm, createdAt, riskDistribution).
  */
 export async function listClusterResults() {

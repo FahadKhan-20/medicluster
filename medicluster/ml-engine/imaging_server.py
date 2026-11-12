@@ -14,9 +14,11 @@ import torch
 from imaging.analyzer import analyze_image, list_models, XRV_MODELS, _cache, _load_pixels
 from imaging.localization import detect_image, DETECTOR_ID, DETECTOR_LABEL, status as detector_status
 from imaging.gradcam import generate_gradcam
+from datasets.service import datasets_bp
 
 app=Flask(__name__)
 app.config['MAX_CONTENT_LENGTH']=70*1024*1024
+app.register_blueprint(datasets_bp)
 MODEL_LOCK=threading.RLock()
 DEFAULT_MODEL=DETECTOR_ID
 torch.set_num_threads(max(1,min(4,os.cpu_count() or 1)))
