@@ -34,7 +34,7 @@ function setup(docs: any[], cursor: string | null = "2026-01-01T00:00:00.000Z") 
     return () => {};
   };
   const onError = vi.fn();
-  const src = new EventSource({ store, state, subscribe, onError });
+  const src = new EventSource({ store, state, subscribe, onError, retryMs: 0 });
   return { src, store, state, onError, row: (p: RealtimePayload) => onRow(p), reconnect: () => onReconnect() };
 }
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -70,6 +70,7 @@ describe("EventSource", () => {
     });
     expect(t.state.setCursor).not.toHaveBeenCalled();
     expect(t.onError).toHaveBeenCalled();
+    t.src.stop();
 
     const ok = setup([media()]);
     await ok.src.start(async () => {});
@@ -93,6 +94,57 @@ describe("EventSource", () => {
     const iso = (t.state.setCursor as any).mock.calls[0][0];
     expect(Math.abs(Date.parse(iso) - Date.now())).toBeLessThan(5000);
     expect((t.store.find as any).mock.calls[0][1]).toEqual({ updatedAt: { $gt: iso } });
+  });
+});
+
+describe("EventSource failure handling", () => {
+  const mk = (id: string, t: string) => ({ _id: id, updatedAt: t });
+  const A = mk("a", "2026-01-01T00:00:10.000Z");
+  const B = mk("b", "2026-01-01T00:00:20.000Z");
+  const ins = (d: any): RealtimePayload => ({ eventType: "INSERT", new: { collection: "patientmedias", id: d._id, data: d } });
+
+  it("failed row is redelivered after a later row succeeds", async () => {
+    const t = setup([]);
+    const seen: string[] = [];
+    let failA = true;
+    await t.src.start(async (e) => {
+      if (e.mediaId === "a" && failA) {
+        failA = false;
+        throw new Error("boom");
+      }
+      seen.push(e.mediaId!);
+    });
+    t.store.find.mockResolvedValue([A, B]);
+    t.row(ins(A));
+    t.row(ins(B));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(seen).toEqual(["b", "a"]);
+    expect(t.state.setCursor).toHaveBeenLastCalledWith(B.updatedAt);
+  });
+
+  it("cursor does not advance while stalled", async () => {
+    const t = setup([]);
+    await t.src.start(async (e) => {
+      if (e.mediaId === "a") throw new Error("boom");
+    });
+    t.store.find.mockResolvedValue([]);
+    t.row(ins(A));
+    t.row(ins(B));
+    await flush();
+    expect(t.state.setCursor).not.toHaveBeenCalled();
+    t.src.stop();
+  });
+
+  it("stop prevents advance of queued events", async () => {
+    const t = setup([]);
+    const onEvent = vi.fn(async () => {});
+    await t.src.start(onEvent);
+    t.row(ins(A));
+    t.row(ins(B));
+    t.src.stop();
+    await flush();
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(t.state.setCursor).not.toHaveBeenCalled();
   });
 });
 

@@ -67,13 +67,20 @@ export class EventSource {
   private handler?: (e: Event) => Promise<void> | void;
   private unsubscribe?: () => void;
   private cursor: string | null = null;
+  private stalled = false;
+  private stopped = false;
+  private catchingUp = false;
+  private retryMs: number;
+  private retryTimer?: ReturnType<typeof setTimeout>;
 
   constructor(opts: {
+    retryMs?: number;
     store: McStore;
     state: AgentState;
     subscribe: Subscribe;
     onError?: (err: unknown) => void;
   }) {
+    this.retryMs = opts.retryMs ?? 5000;
     this.store = opts.store;
     this.state = opts.state;
     this.subscribe = opts.subscribe;
@@ -82,6 +89,7 @@ export class EventSource {
 
   async start(onEvent: (e: Event) => Promise<void> | void): Promise<void> {
     this.handler = onEvent;
+    this.stopped = false;
     this.cursor = await this.state.cursor();
     if (this.cursor === null) {
       this.cursor = new Date().toISOString();
@@ -98,6 +106,17 @@ export class EventSource {
     this.unsubscribe?.();
     this.unsubscribe = undefined;
     this.handler = undefined;
+    this.stopped = true;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
+  }
+
+  private scheduleRetry(): void {
+    if (this.stopped || this.retryTimer) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined;
+      void this.enqueue(() => this.catchUp());
+    }, this.retryMs);
   }
 
   /** Serialises realtime and catch-up work so the cursor only ever moves forward in order. */
@@ -113,29 +132,52 @@ export class EventSource {
   }
 
   private async catchUp(): Promise<void> {
-    for (;;) {
-      const cursor = this.cursor ?? new Date(0).toISOString();
-      const docs = await this.store.find(MEDIA, { updatedAt: { $gt: cursor } }, { updatedAt: 1 }, CATCH_UP_LIMIT);
-      for (const doc of docs) {
-        const event = docToEvent(doc);
-        if (event) await this.deliver(event, doc.updatedAt);
-        else await this.advance(doc.updatedAt);
+    if (this.stopped) return;
+    this.catchingUp = true;
+    try {
+      for (;;) {
+        const cursor = this.cursor ?? new Date(0).toISOString();
+        const docs = await this.store.find(MEDIA, { updatedAt: { $gt: cursor } }, { updatedAt: 1 }, CATCH_UP_LIMIT);
+        for (const doc of docs) {
+          const event = docToEvent(doc);
+          if (event) {
+            if (!(await this.deliver(event, doc.updatedAt))) return;
+          } else await this.advance(doc.updatedAt);
+        }
+        if (docs.length < CATCH_UP_LIMIT || this.cursor === cursor) break;
       }
-      if (docs.length < CATCH_UP_LIMIT || this.cursor === cursor) return;
+      if (!this.stopped) this.stalled = false;
+    } catch (err) {
+      this.stalled = true;
+      this.scheduleRetry();
+      throw err;
+    } finally {
+      this.catchingUp = false;
     }
   }
 
-  private async deliver(event: Event, updatedAt?: string): Promise<void> {
+  /** Returns false if the handler failed (the cursor is then not advanced and a retry is scheduled). */
+  private async deliver(event: Event, updatedAt?: string): Promise<boolean> {
+    if (this.stopped) return true;
     const now = Date.now();
     for (const [id, ts] of this.seen) if (now - ts > DEDUPE_WINDOW_MS) this.seen.delete(id);
     if (!this.seen.has(event.id) && this.handler) {
-      await this.handler(event);
+      try {
+        await this.handler(event);
+      } catch (err) {
+        this.stalled = true;
+        this.scheduleRetry();
+        this.onError(err);
+        return false;
+      }
       this.seen.set(event.id, now);
     }
     await this.advance(updatedAt);
+    return true;
   }
 
   private async advance(updatedAt?: string): Promise<void> {
+    if (this.stopped || (this.stalled && !this.catchingUp)) return;
     if (typeof updatedAt !== "string" || (this.cursor !== null && updatedAt <= this.cursor)) return;
     await this.state.setCursor(updatedAt);
     this.cursor = updatedAt;
