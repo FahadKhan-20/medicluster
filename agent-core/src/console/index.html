@@ -1,579 +1,914 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MediCluster Agent Command Center</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Auditor — MediCluster Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-page: #0b0f19;
-      --bg-card: #111827;
-      --bg-card-subtle: #1f2937;
-      --bg-input: #1f2937;
-      --border: #374151;
-      --border-subtle: #1f2937;
-      --text: #f9fafb;
-      --text-muted: #9ca3af;
-      --text-dim: #6b7280;
-      --primary: #3b82f6;
-      --primary-hover: #2563eb;
-      --primary-subtle: rgba(59, 130, 246, 0.15);
-      --success: #10b981;
-      --success-subtle: rgba(16, 185, 129, 0.15);
-      --danger: #ef4444;
-      --danger-hover: #dc2626;
-      --danger-subtle: rgba(239, 68, 68, 0.15);
-      --warning: #f59e0b;
-      --warning-subtle: rgba(245, 158, 11, 0.15);
-      --purple: #8b5cf6;
-      --purple-subtle: rgba(139, 92, 246, 0.15);
-      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      --radius: 8px;
-      --radius-sm: 4px;
-      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+      --bg-page: #000000;
+      --bg-side: #000000;
+      --bg-main: #1c1c1f;
+      --bg-card: #27272b;
+      --bg-card-subtle: #2f2f34;
+      --bg-dark-input: #111113;
+      --bg-subtle-dark: #141416;
+      --border-outer: #1f1f22;
+      --border-main: #2e2e33;
+      --border-inner: #34343a;
+      --border-subtle: #26262a;
+      --text: #ececf0;
+      --text-muted: #8e8e96;
+      --text-dim: #6b6b72;
+      --text-secondary: #b9b9c1;
+      --col-pass: #6fcf97;
+      --col-escalate: #e8b44a;
+      --col-block: #e5655f;
+      --accent: #9db8ff;
+      --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
     }
 
     [data-theme="light"] {
-      --bg-page: #f3f4f6;
-      --bg-card: #ffffff;
-      --bg-card-subtle: #f9fafb;
-      --bg-input: #f9fafb;
-      --border: #e5e7eb;
-      --border-subtle: #f3f4f6;
-      --text: #111827;
-      --text-muted: #4b5563;
-      --text-dim: #9ca3af;
-      --primary: #2563eb;
-      --primary-hover: #1d4ed8;
-      --primary-subtle: rgba(37, 99, 235, 0.1);
-      --success: #059669;
-      --success-subtle: rgba(5, 150, 105, 0.1);
-      --danger: #dc2626;
-      --danger-hover: #b91c1c;
-      --danger-subtle: rgba(220, 38, 38, 0.1);
-      --warning: #d97706;
-      --warning-subtle: rgba(217, 119, 6, 0.1);
-      --purple: #7c3aed;
-      --purple-subtle: rgba(124, 58, 237, 0.1);
-      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --bg-page: #e8e8ed;
+      --bg-side: #f4f4f7;
+      --bg-main: #ffffff;
+      --bg-card: #f4f4f7;
+      --bg-card-subtle: #e8e8ed;
+      --bg-dark-input: #ffffff;
+      --bg-subtle-dark: #e8e8ed;
+      --border-outer: #d0d0d7;
+      --border-main: #dcdce2;
+      --border-inner: #c4c4cd;
+      --border-subtle: #e2e2e8;
+      --text: #18181b;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --text-secondary: #334155;
+      --col-pass: #15803d;
+      --col-escalate: #b45309;
+      --col-block: #b91c1c;
+      --accent: #2563eb;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: var(--font-sans);
-      background-color: var(--bg-page);
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg-page);
       color: var(--text);
-      line-height: 1.5;
-      font-size: 14px;
-      min-height: 100vh;
+      font: 400 14px/1.55 var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    a { color: inherit; text-decoration: none; }
+    a:hover { color: #fff; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    textarea::placeholder, input::placeholder { color: var(--text-muted); }
+    summary::-webkit-details-marker { display: none; }
+    button, a, select { transition: background-color .18s ease, color .18s ease, opacity .18s ease; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+    /* Main Grid Frame */
+    .app-shell {
+      display: grid;
+      grid-template-columns: 268px minmax(0, 1fr);
+      gap: 12px;
+      height: 100vh;
+      padding: 10px 10px 10px 14px;
+      background: var(--bg-page);
+    }
+    .app-shell.sidebar-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
     }
 
-    /* Top Navigation Bar */
-    header {
-      background: var(--bg-card);
-      border-bottom: 1px solid var(--border);
-      padding: 12px 24px;
+    /* Left Sidebar */
+    .sidebar-wrapper {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      background: var(--bg-side);
+      border-radius: 18px;
+    }
+    .sidebar-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      box-shadow: var(--shadow);
-    }
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .brand-logo {
-      width: 32px;
-      height: 32px;
-      background: var(--primary);
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: 700;
-      font-size: 18px;
+      height: 34px;
+      padding: 0 4px 0 6px;
+      margin-bottom: 14px;
     }
     .brand-title {
-      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-weight: 700;
-      letter-spacing: -0.02em;
+      font-size: 18px;
+      letter-spacing: -.02em;
+      cursor: pointer;
     }
-    .brand-subtitle {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    /* Container */
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-
-    /* Alerts and Notices */
-    .banner {
-      padding: 12px 16px;
-      border-radius: var(--radius);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 13px;
-    }
-    .banner-danger {
-      background: var(--danger-subtle);
-      border: 1px solid var(--danger);
-      color: var(--danger);
-    }
-    .banner-warning {
-      background: var(--warning-subtle);
-      border: 1px solid var(--warning);
-      color: var(--warning);
-    }
-    .banner-success {
-      background: var(--success-subtle);
-      border: 1px solid var(--success);
-      color: var(--success);
-    }
-
-    /* Grid Layout */
-    .grid-top {
+    .icon-btn {
+      width: 34px;
+      height: 34px;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 16px;
+      place-items: center;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 0;
+    }
+    .icon-btn:hover {
+      background: var(--bg-subtle-dark);
+      color: var(--text);
     }
 
-    /* Cards */
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 18px;
-      box-shadow: var(--shadow);
+    aside.sidebar-card {
+      flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      background: var(--bg-side);
+      border: 1px solid var(--border-outer);
+      border-radius: 18px;
+      padding: 12px;
     }
-    .card-header {
+
+    .search-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .search-input-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 34px;
+      padding: 0 11px;
+      border-radius: 10px;
+      background: var(--bg-subtle-dark);
+      color: var(--text-muted);
+    }
+    .search-input-wrap input {
+      border: 0;
+      outline: none;
+      background: transparent;
+      width: 100%;
+      color: var(--text);
+    }
+    .btn-action-round {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 10px;
+      background: #f4f4f6;
+      color: #18181b;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .sidebar-tree-container {
+      flex: 1;
+      overflow-y: auto;
+      margin: 0 -4px;
+      padding: 0 4px;
+    }
+    .group-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 40px;
+      width: 100%;
+      padding: 0 8px 0 6px;
+      margin-top: 4px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+    }
+    .group-btn:hover {
+      background: var(--bg-subtle-dark);
+    }
+    .tree-items-list {
+      margin: 0 0 6px 15px;
+    }
+    .tree-item-link {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 36px;
+      margin-left: 14px;
+      padding: 0 10px;
+      border-radius: 6px;
+      font-size: 14px;
+      color: var(--text);
+      white-space: nowrap;
+      background: transparent;
+    }
+    .tree-item-link:hover {
+      background: var(--bg-subtle-dark);
+    }
+    .tree-item-link.active {
+      background: var(--bg-subtle-dark);
+    }
+    .elbow-line {
+      position: absolute;
+      left: -14px;
+      width: 9px;
+      border-left: 1.5px solid var(--text-dim);
+      border-bottom: 1.5px solid var(--text-dim);
+      border-bottom-left-radius: 7px;
+    }
+    .elbow-stem {
+      position: absolute;
+      left: -14px;
+      top: 50%;
+      bottom: 0;
+      border-left: 1.5px solid var(--text-dim);
+    }
+
+    .sidebar-footer {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-outer);
+    }
+    .foot-icon-link {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--bg-subtle-dark);
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .foot-icon-link:hover {
+      background: #1d1d20;
+      color: var(--text);
+    }
+    .foot-icon-link.active {
+      background: #1d1d20;
+      color: var(--text);
+    }
+
+    /* Main Section */
+    section.main-card {
+      position: relative;
+      background: var(--bg-main);
+      border: 1px solid var(--border-main);
+      border-radius: 18px;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Top Tabs Header */
+    .tabs-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 10px;
+      gap: 8px;
+      height: 52px;
+      padding: 0 12px 0 10px;
+      flex: none;
+      border-bottom: 1px solid var(--border-subtle);
     }
-    .card-title {
-      font-size: 15px;
-      font-weight: 600;
+    .tabs-track {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tab-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 32px;
+      max-width: 220px;
+      padding: 0 4px 0 12px;
+      border-radius: 9px;
+      font-size: 13px;
+      cursor: pointer;
+      flex: none;
+      background: transparent;
+      color: var(--text-muted);
+      transition: background-color .18s ease, color .18s ease;
+    }
+    .tab-pill:hover {
+      background: var(--bg-card);
+      color: var(--text);
+    }
+    .tab-pill.active {
+      background: var(--bg-card);
+      color: var(--text);
+    }
+    .tab-close-btn {
+      width: 22px;
+      height: 22px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text-muted);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      padding: 0;
+      flex: none;
+      opacity: 0.7;
+    }
+    .tab-close-btn:hover {
+      background: #34343a;
+      color: var(--text);
+      opacity: 1;
+    }
+
+    .top-status-pills {
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .card-subtext {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    /* Form Controls */
-    input[type="text"], input[type="password"] {
-      width: 100%;
-      background: var(--bg-input);
-      border: 1px solid var(--border);
-      color: var(--text);
-      padding: 8px 12px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.15s ease;
-    }
-    input[type="text"]:focus, input[type="password"]:focus {
-      border-color: var(--primary);
-    }
-    .input-row {
-      display: flex;
-      gap: 8px;
-    }
-
-    /* Buttons */
-    button, .btn {
+    .service-pill {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 8px 14px;
-      border-radius: var(--radius-sm);
+      gap: 4px;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-main);
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--col-pass);
+    }
+    .status-dot.down {
+      background: var(--col-block);
+    }
+    .status-dot.pulse {
+      animation: dotPulse 2s infinite;
+    }
+    @keyframes dotPulse {
+      0% { opacity: 0.6; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.3); }
+      100% { opacity: 0.6; transform: scale(0.9); }
+    }
+
+    /* Main View Area */
+    .view-container {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    /* View: Home / Overview */
+    .home-view {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 24px 40px;
+    }
+    .home-title {
+      margin: 0 0 16px;
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -.03em;
+      text-align: center;
+    }
+    .home-subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .composer-card {
+      width: min(750px, 100%);
+      background: var(--bg-card);
+      border-radius: 18px;
+      padding: 16px 16px 12px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border-main);
+    }
+    .composer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .composer-label {
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 600;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .composer-input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-dark-input);
+      border-radius: 12px;
+      padding: 4px 6px 4px 14px;
+      border: 1px solid var(--border-inner);
+    }
+    .composer-input-row input {
+      flex: 1;
+      border: 0;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      font-size: 14px;
+      padding: 6px 0;
+    }
+    .btn-send {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 0;
+      display: grid;
+      place-items: center;
+      background: #f4f4f6;
+      color: #18181b;
       cursor: pointer;
-      border: 1px solid transparent;
-      transition: all 0.15s ease;
-      font-family: inherit;
-      white-space: nowrap;
+      padding: 0;
+      flex: none;
     }
-    .btn-primary {
-      background: var(--primary);
-      color: white;
+    .btn-send:disabled {
+      background: #2f2f34;
+      color: #8e8e96;
+      cursor: not-allowed;
     }
-    .btn-primary:hover:not(:disabled) {
-      background: var(--primary-hover);
+
+    /* Kill Switch & Health Bar */
+    .controls-banner {
+      width: min(750px, 100%);
+      background: var(--bg-card);
+      border: 1px solid var(--border-main);
+      border-radius: 16px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .controls-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .kill-switch-title {
+      font-weight: 600;
+      font-size: 13.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .kill-switch-status {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .controls-buttons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-pill {
+      height: 34px;
+      padding: 0 16px;
+      border-radius: 999px;
+      border: 0;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
     .btn-danger {
-      background: var(--danger);
+      background: var(--col-block);
       color: white;
     }
     .btn-danger:hover:not(:disabled) {
-      background: var(--danger-hover);
+      filter: brightness(1.1);
     }
     .btn-success {
-      background: var(--success);
-      color: white;
+      background: var(--col-pass);
+      color: #18181b;
     }
     .btn-success:hover:not(:disabled) {
       filter: brightness(1.1);
     }
-    .btn-outline {
-      background: transparent;
-      border-color: var(--border);
+    .btn-subtle {
+      background: var(--bg-card-subtle);
+      color: var(--text-secondary);
+    }
+    .btn-subtle:hover:not(:disabled) {
+      background: #38383f;
       color: var(--text);
     }
-    .btn-outline:hover:not(:disabled) {
-      background: var(--bg-card-subtle);
-    }
-    .btn-sm {
-      padding: 4px 8px;
-      font-size: 12px;
-    }
     button:disabled {
-      opacity: 0.5;
+      opacity: 0.45;
       cursor: not-allowed;
     }
 
-    /* Badges & Indicators */
-    .badge {
-      display: inline-flex;
+    /* Recent Live Audits Section */
+    .feed-section {
+      width: min(750px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .feed-header {
+      display: flex;
       align-items: center;
-      gap: 4px;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .feed-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -.01em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .audit-card-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-main);
+      border-radius: 14px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      transition: background-color .18s ease, border-color .18s ease;
+    }
+    .audit-card-item:hover {
+      background: #2c2c31;
+      border-color: var(--border-inner);
+    }
+    .audit-card-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .audit-score-gauge-mini {
+      position: relative;
+      width: 36px;
+      height: 36px;
+      flex: none;
+    }
+    .audit-score-num {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .audit-card-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .audit-card-title {
+      font-weight: 600;
+      font-size: 13.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .audit-card-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tag-badge {
       padding: 2px 8px;
-      border-radius: 9999px;
+      border-radius: 999px;
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: .04em;
     }
-    .badge-success { background: var(--success-subtle); color: var(--success); border: 1px solid var(--success); }
-    .badge-danger { background: var(--danger-subtle); color: var(--danger); border: 1px solid var(--danger); }
-    .badge-warning { background: var(--warning-subtle); color: var(--warning); border: 1px solid var(--warning); }
-    .badge-purple { background: var(--purple-subtle); color: var(--purple); border: 1px solid var(--purple); }
-    .badge-muted { background: var(--bg-card-subtle); color: var(--text-muted); border: 1px solid var(--border); }
-    .badge-primary { background: var(--primary-subtle); color: var(--primary); border: 1px solid var(--primary); }
+    .tag-pass { background: rgba(111, 207, 151, 0.15); color: var(--col-pass); }
+    .tag-escalate { background: rgba(232, 180, 74, 0.15); color: var(--col-escalate); }
+    .tag-block { background: rgba(229, 101, 95, 0.15); color: var(--col-block); }
+    .tag-subtle { background: #1c1c1f; color: var(--text-secondary); }
 
-    .pulse-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--success);
-      display: inline-block;
-      animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-      0% { transform: scale(0.95); opacity: 0.8; }
-      50% { transform: scale(1.3); opacity: 1; }
-      100% { transform: scale(0.95); opacity: 0.8; }
-    }
-
-    /* Health Display */
-    .health-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-    .health-item {
-      background: var(--bg-card-subtle);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 8px;
-      text-align: center;
-    }
-    .health-label {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 4px;
-    }
-
-    /* Kill Switch Container */
-    .kill-switch-box {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px;
+    /* View: Thread / Single Audit */
+    .thread-view {
+      width: min(780px, 100%);
+      margin: 0 auto;
+      padding: 20px 24px 36px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      background: var(--bg-card-subtle);
+      gap: 20px;
     }
-    .kill-switch-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    /* Audit Feed Controls */
-    .feed-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-    .feed-filters {
+    .thread-header-score {
       display: flex;
       align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .filter-btn {
-      padding: 4px 10px;
-      font-size: 12px;
-      border-radius: 9999px;
-      background: var(--bg-card-subtle);
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      cursor: pointer;
-    }
-    .filter-btn.active {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: white;
-    }
-
-    /* Audit Items */
-    .audit-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .audit-entry {
-      background: var(--bg-card-subtle);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      transition: border-color 0.15s ease;
-    }
-    .audit-entry:hover {
-      border-color: var(--primary);
-    }
-    .audit-summary {
-      padding: 12px 16px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      user-select: none;
-    }
-    .audit-summary-left {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .audit-summary-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .audit-time {
-      font-family: var(--font-mono);
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-    .audit-details {
-      padding: 16px;
-      border-top: 1px solid var(--border);
-      background: var(--bg-card);
-      display: flex;
-      flex-direction: column;
       gap: 16px;
     }
+    .score-circle-lg {
+      position: relative;
+      width: 56px;
+      height: 56px;
+      flex: none;
+    }
+    .score-circle-lg b {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+    }
+    .thread-header-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    .thread-header-sub {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
 
-    /* Steps Timeline */
-    .steps-timeline {
+    /* Steps & Jev Display */
+    .step-box {
+      background: var(--bg-card);
+      border-radius: 14px;
+      padding: 14px 16px;
+      border: 1px solid var(--border-main);
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      position: relative;
-      padding-left: 20px;
+      gap: 10px;
     }
-    .steps-timeline::before {
-      content: "";
-      position: absolute;
-      top: 10px;
-      bottom: 10px;
-      left: 7px;
-      width: 2px;
-      background: var(--border);
-    }
-    .step-item {
-      position: relative;
-      background: var(--bg-card-subtle);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px;
-    }
-    .step-item::before {
-      content: "";
-      position: absolute;
-      top: 14px;
-      left: -17px;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--primary);
-      border: 2px solid var(--bg-card);
-    }
-    .step-header {
+    .step-box-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 8px;
     }
-    .step-title {
-      font-weight: 600;
-      font-size: 13px;
-      display: flex;
+    .step-title-badge {
+      display: inline-flex;
       align-items: center;
       gap: 6px;
-    }
-    .step-time {
-      font-size: 11px;
-      color: var(--text-dim);
-      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--text-secondary);
     }
 
-    /* Jev Probabilities Display */
+    /* Jev Probabilities Grid */
     .jev-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
-      margin-top: 8px;
+      margin-top: 4px;
     }
     .jev-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px;
+      background: #1c1c1f;
+      border: 1px solid var(--border-inner);
+      border-radius: 10px;
+      padding: 12px;
     }
     .jev-card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
     .jev-card-title {
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 11px;
+      font-weight: 700;
       color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.04em;
+      letter-spacing: .04em;
     }
-    .prob-bar-container {
+    .prob-row {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 3px;
+      margin-bottom: 6px;
     }
-    .prob-bar-row {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .prob-bar-labels {
+    .prob-labels {
       display: flex;
       justify-content: space-between;
       font-size: 12px;
     }
-    .prob-bar-track {
-      height: 7px;
-      background: var(--bg-input);
-      border-radius: 9999px;
+    .prob-track {
+      height: 6px;
+      background: #111113;
+      border-radius: 999px;
       overflow: hidden;
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-main);
     }
-    .prob-bar-fill {
+    .prob-fill {
       height: 100%;
-      border-radius: 9999px;
-      background: var(--primary);
-      transition: width 0.3s ease;
+      border-radius: 999px;
+      background: var(--text-dim);
+      transition: width .3s ease;
     }
-    .prob-bar-fill.chosen {
-      background: var(--success);
+    .prob-fill.chosen {
+      background: var(--col-pass);
     }
 
-    /* Raw JSON Viewers */
-    pre.code-block {
-      background: var(--bg-page);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 10px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--text);
+    pre.code-viewer {
+      margin: 0;
+      padding: 12px;
+      border: 1px solid var(--border-inner);
+      border-radius: 10px;
+      background: var(--bg-dark-input);
+      font: 11.5px/1.6 var(--font-mono);
+      color: var(--text-secondary);
       overflow-x: auto;
-      max-height: 240px;
+      max-height: 260px;
     }
 
-    /* Empty state */
-    .empty-state {
-      text-align: center;
-      padding: 36px 16px;
-      color: var(--text-muted);
+    /* View: Agents */
+    .agents-view {
+      width: min(820px, 100%);
+      margin: 0 auto;
+      padding: 24px 24px 40px;
     }
-    .empty-state-icon {
-      font-size: 32px;
-      margin-bottom: 8px;
-      opacity: 0.6;
-    }
-
-    /* Modal */
-    .modal-backdrop {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.65);
-      backdrop-filter: blur(4px);
+    .agents-header {
       display: flex;
       align-items: center;
-      justify-content: center;
-      z-index: 100;
-      padding: 16px;
+      justify-content: space-between;
+      margin-bottom: 20px;
     }
-    .modal-card {
+    .agents-table-box {
+      border-radius: 14px;
       background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-      max-width: 440px;
-      width: 100%;
-      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid var(--border-main);
+    }
+    .agent-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 58px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .agent-row:first-child { border-top: 0; }
+    .agent-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--bg-card-subtle);
+      font-weight: 700;
+      font-size: 13px;
+      flex: none;
+    }
+
+    /* View: Settings */
+    .settings-view {
+      padding: 0 24px 48px;
+    }
+    .settings-nav {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      border-bottom: 1px solid var(--border-main);
+      overflow-x: auto;
+      scrollbar-width: none;
+      justify-content: center;
+    }
+    .settings-nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      height: 56px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .settings-nav-btn:hover { color: var(--text); }
+    .settings-nav-btn.active {
+      color: var(--text);
+      border-bottom-color: var(--text);
+    }
+    .settings-pane {
+      width: min(736px, 100%);
+      margin: 0 auto;
+      padding-top: 34px;
+    }
+    .setting-group {
+      margin-bottom: 24px;
+    }
+    .setting-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .setting-desc {
+      margin: 0 0 10px;
+      color: var(--text-muted);
+      font-size: 12.5px;
+    }
+
+    /* Modal / Sheets */
+    .sheet-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .6);
+      backdrop-filter: blur(2px);
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      z-index: 50;
+    }
+    .sheet-dialog {
+      width: min(480px, 100%);
+      background: #1c1c1f;
+      border: 1px solid var(--border-main);
+      border-radius: 20px;
+      box-shadow: 0 24px 80px rgba(0,0,0,.5);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .sheet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 20px 0 24px;
+    }
+    .sheet-body {
+      padding: 20px 24px 24px;
       display: flex;
       flex-direction: column;
       gap: 16px;
+    }
+    .sheet-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-main);
+      background: #19191c;
+    }
+
+    /* Floating Toast */
+    .floating-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #f4f4f6;
+      color: #18181b;
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 13px;
+      z-index: 60;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
     }
 
     .hidden { display: none !important; }
@@ -581,753 +916,1167 @@
 </head>
 <body>
 
-  <!-- Top Header -->
-  <header>
-    <div class="header-left">
-      <div class="brand-logo">M</div>
-      <div>
-        <div class="brand-title">MediCluster Agent Core</div>
-        <div class="brand-subtitle">Command Center & Safety Console</div>
+  <div id="appShell" class="app-shell">
+
+    <!-- Left Sidebar -->
+    <div id="sidebarWrapper" class="sidebar-wrapper">
+      <div class="sidebar-header">
+        <div class="brand-title" onclick="App.setView('home')">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"></path>
+            <path d="M8.5 12l2.5 2.5 4.5-5"></path>
+          </svg>
+          <span>Agent Auditor</span>
+        </div>
+        <button id="btnToggleSidebar" class="icon-btn" aria-label="Toggle sidebar" title="Toggle sidebar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="3"></rect>
+            <path d="M9 4v16"></path>
+          </svg>
+        </button>
       </div>
-    </div>
-    <div class="header-right">
-      <span id="headerAgentBadge" class="badge badge-muted">Checking Agent...</span>
-      <span id="headerAuthBadge" class="badge badge-muted">No Key</span>
-      <button id="btnOpenAuth" class="btn btn-outline btn-sm" title="Change Admin Key">Admin Key</button>
-      <button id="btnThemeToggle" class="btn btn-outline btn-sm" title="Toggle Dark/Light Mode">☀️ / 🌙</button>
-    </div>
-  </header>
 
-  <main class="container">
+      <aside class="sidebar-card">
+        <!-- Search & New Scan -->
+        <div class="search-row">
+          <label class="search-input-wrap">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m20 20-3.5-3.5"></path>
+            </svg>
+            <input id="searchInput" type="text" placeholder="Search audits" aria-label="Search audits">
+          </label>
+          <button id="btnNewScan" class="btn-action-round" title="New scan reprocess" aria-label="New audit">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+          </button>
+        </div>
 
-    <!-- Global Alert / Notice Banner -->
-    <div id="globalBanner" class="banner hidden">
-      <span id="globalBannerText"></span>
-      <button class="btn btn-outline btn-sm" onclick="hideBanner()">Dismiss</button>
+        <!-- Groups Tree -->
+        <div class="sidebar-tree-container">
+          
+          <!-- Group: Review -->
+          <div>
+            <button class="group-btn" onclick="App.toggleGroup('review')">
+              <svg viewBox="0 0 8 14" width="8" height="14" fill="#8e8e96" style="margin:0 4px 0 2px;flex:none">
+                <circle cx="2" cy="2" r="1.2"></circle><circle cx="6" cy="2" r="1.2"></circle>
+                <circle cx="2" cy="7" r="1.2"></circle><circle cx="6" cy="7" r="1.2"></circle>
+                <circle cx="2" cy="12" r="1.2"></circle><circle cx="6" cy="12" r="1.2"></circle>
+              </svg>
+              <span style="font-weight:700; font-size:14.5px">Review</span>
+              <span id="reviewCountBadge" style="margin-left:auto; color:#8e8e96; font-size:12.5px; font-weight:600">0</span>
+              <svg id="caretReview" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#8e8e96" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s">
+                <path d="m6 9 6 6 6-6"></path>
+              </svg>
+            </button>
+            <div id="treeReviewList" class="tree-items-list"></div>
+          </div>
+
+          <!-- Group: History -->
+          <div>
+            <button class="group-btn" onclick="App.toggleGroup('history')">
+              <svg viewBox="0 0 8 14" width="8" height="14" fill="#8e8e96" style="margin:0 4px 0 2px;flex:none">
+                <circle cx="2" cy="2" r="1.2"></circle><circle cx="6" cy="2" r="1.2"></circle>
+                <circle cx="2" cy="7" r="1.2"></circle><circle cx="6" cy="7" r="1.2"></circle>
+                <circle cx="2" cy="12" r="1.2"></circle><circle cx="6" cy="12" r="1.2"></circle>
+              </svg>
+              <span style="font-weight:700; font-size:14.5px">History</span>
+              <span id="historyCountBadge" style="margin-left:auto; color:#8e8e96; font-size:12.5px; font-weight:600">0</span>
+              <svg id="caretHistory" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#8e8e96" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s">
+                <path d="m6 9 6 6 6-6"></path>
+              </svg>
+            </button>
+            <div id="treeHistoryList" class="tree-items-list"></div>
+          </div>
+
+          <!-- Group: Workflows / Agents -->
+          <div>
+            <button class="group-btn" onclick="App.toggleGroup('agents')">
+              <svg viewBox="0 0 8 14" width="8" height="14" fill="#8e8e96" style="margin:0 4px 0 2px;flex:none">
+                <circle cx="2" cy="2" r="1.2"></circle><circle cx="6" cy="2" r="1.2"></circle>
+                <circle cx="2" cy="7" r="1.2"></circle><circle cx="6" cy="7" r="1.2"></circle>
+                <circle cx="2" cy="12" r="1.2"></circle><circle cx="6" cy="12" r="1.2"></circle>
+              </svg>
+              <span style="font-weight:700; font-size:14.5px">Agents</span>
+              <span style="margin-left:auto; color:#8e8e96; font-size:12.5px; font-weight:600">5</span>
+              <svg id="caretAgents" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#8e8e96" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s">
+                <path d="m6 9 6 6 6-6"></path>
+              </svg>
+            </button>
+            <div id="treeAgentsList" class="tree-items-list">
+              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span>Imaging Scan Loop</span>
+              </a>
+              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span style="color:#8e8e96">Ambulance Dispatch</span>
+              </a>
+              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span style="color:#8e8e96">Brain Radar</span>
+              </a>
+              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+                <span class="elbow-line" style="top:0; height:50%;"></span>
+                <span style="color:#8e8e96">Self-Heal Engine</span>
+              </a>
+              <a href="#" class="tree-item-link" onclick="App.setView('agents')">
+                <span class="elbow-line" style="top:0; height:50%; border-left-color:#c9c9cf; border-bottom-color:#c9c9cf;"></span>
+                <span style="color:#8e8e96">Spec Builder</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- New Audit Quick Trigger -->
+          <a href="#" onclick="App.setView('home')" style="display:flex; align-items:center; gap:10px; height:40px; margin-top:6px; padding:0 10px 0 12px; border-radius:10px; font-size:14px; color:var(--text);">
+            <span style="width:24px; height:24px; border-radius:6px; background:#1d1d20; display:grid; place-items:center;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+            </span>
+            <span>Reprocess Scan</span>
+          </a>
+
+        </div>
+
+        <!-- Sidebar Footer Navigation Icons -->
+        <div class="sidebar-footer">
+          <a href="#" id="navFootAgents" class="foot-icon-link" onclick="App.setView('agents')" title="Agents & Workflows">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="8" width="16" height="12" rx="3"></rect>
+              <path d="M12 8V4M9 14h.01M15 14h.01"></path>
+            </svg>
+          </a>
+          <a href="#" id="navFootKeys" class="foot-icon-link" onclick="App.openAuthModal()" title="API & Admin Keys">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="7.5" cy="15.5" r="4.5"></circle>
+              <path d="m11 12 9-9M17 6l3 3"></path>
+            </svg>
+          </a>
+          <a href="#" id="navFootKillSwitch" class="foot-icon-link" onclick="App.setView('settings:health')" title="Kill Switch & Health">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+            </svg>
+          </a>
+          <a href="#" id="navFootSettings" class="foot-icon-link" onclick="App.setView('settings:rules')" title="Settings & Decision Rules">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.8-.7-.7-2.8z"></path>
+            </svg>
+          </a>
+        </div>
+      </aside>
     </div>
 
-    <!-- Top Grid: Service Health & Kill Switch, Reprocess Form -->
-    <div class="grid-top">
+    <!-- Main Content Section -->
+    <section class="main-card">
       
-      <!-- Card: Health & Kill Switch -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span>🛡️</span>
-            <span>Agent State & Services</span>
-          </div>
-          <button id="btnRefreshHealth" class="btn btn-outline btn-sm">Refresh</button>
+      <!-- Top Navigation / Tabs Bar -->
+      <div class="tabs-header">
+        <div style="flex:1; min-width:0; display:flex; align-items:center; gap:6px;">
+          <button id="btnSidebarShow" class="icon-btn hidden" aria-label="Show sidebar">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="3"></rect>
+              <path d="M9 4v16"></path>
+            </svg>
+          </button>
+          
+          <div id="tabsTrack" class="tabs-track"></div>
+          
+          <button id="btnNewTab" class="icon-btn" aria-label="New tab" title="New tab" onclick="App.openTab('home')">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+          </button>
         </div>
 
-        <div class="health-grid">
-          <div class="health-item">
-            <div class="health-label">Backend</div>
-            <span id="healthBackend" class="badge badge-muted">—</span>
+        <!-- Service Health & Kill Switch Pills -->
+        <div class="top-status-pills">
+          <div class="service-pill" title="Backend API">
+            <span id="dotBackend" class="status-dot"></span>
+            <span>BE</span>
           </div>
-          <div class="health-item">
-            <div class="health-label">ML Engine</div>
-            <span id="healthMl" class="badge badge-muted">—</span>
+          <div class="service-pill" title="Machine Learning Engine">
+            <span id="dotMl" class="status-dot"></span>
+            <span>ML</span>
           </div>
-          <div class="health-item">
-            <div class="health-label">Intelligence</div>
-            <span id="healthIntel" class="badge badge-muted">—</span>
+          <div class="service-pill" title="Intelligence Engine">
+            <span id="dotIntel" class="status-dot"></span>
+            <span>INT</span>
           </div>
-        </div>
-
-        <div class="kill-switch-box">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <strong style="font-size:13px;">Kill Switch Status</strong>
-              <div id="killSwitchNote" class="card-subtext">Checking state...</div>
-            </div>
-            <span id="killSwitchBadge" class="badge badge-muted">—</span>
+          <div id="topKillSwitchPill" class="service-pill" style="cursor:pointer;" onclick="App.setView('settings:health')" title="Kill Switch State">
+            <span id="dotKillSwitch" class="status-dot pulse"></span>
+            <span id="labelKillSwitch">RUNNING</span>
           </div>
-          <div class="kill-switch-actions">
-            <button id="btnKillStop" class="btn btn-danger" style="flex:1;">
-              🛑 Stop Agent
-            </button>
-            <button id="btnKillStart" class="btn btn-success" style="flex:1;">
-              ▶️ Resume Agent
-            </button>
-          </div>
+          <button id="btnThemeToggle" class="icon-btn" title="Toggle Theme" style="margin-left:4px;">
+            ☀️
+          </button>
         </div>
       </div>
 
-      <!-- Card: Reprocess Patient Media Scan -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <span>⚡</span>
-            <span>Reprocess Media Scan</span>
+      <!-- Views Container -->
+      <div id="viewContainer" class="view-container">
+
+        <!-- VIEW: HOME (Command Center Overview) -->
+        <div id="viewHome" class="home-view">
+          <h1 class="home-title">Agent Auditor</h1>
+          <p class="home-subtitle">Autonomous Clinical Decision & Safety Verification Feed</p>
+
+          <!-- Kill Switch & Health Controls Banner -->
+          <div class="controls-banner">
+            <div class="controls-left">
+              <div class="kill-switch-title">
+                <span id="killSwitchBannerDot" class="status-dot"></span>
+                <span>Kill Switch Control</span>
+                <span id="killSwitchBannerBadge" class="tag-badge tag-pass">Active</span>
+              </div>
+              <div id="killSwitchBannerNote" class="kill-switch-status">
+                Agent is running and processing events. Safety gate threshold: 0.90 noul.
+              </div>
+            </div>
+            <div class="controls-buttons">
+              <button id="btnStopAgent" class="btn-pill btn-danger" onclick="App.setKillSwitch('stop')">
+                🛑 Stop Agent
+              </button>
+              <button id="btnStartAgent" class="btn-pill btn-success" onclick="App.setKillSwitch('start')">
+                ▶️ Resume Agent
+              </button>
+            </div>
           </div>
-          <span class="badge badge-muted">POST /command</span>
+
+          <!-- Reprocess Scan Composer Card -->
+          <div class="composer-card">
+            <div class="composer-header">
+              <span class="composer-label">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+                </svg>
+                Reprocess Patient Scan
+              </span>
+              <span style="font-size:12px; color:var(--text-muted);">POST /command</span>
+            </div>
+            <form id="composerForm" onsubmit="App.handleReprocess(event)">
+              <div class="composer-input-row">
+                <input id="composerMediaId" type="text" placeholder="Enter Media ID to audit & reprocess (e.g. m1)" required>
+                <button type="submit" id="btnComposerSend" class="btn-send" title="Audit Scan">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 19V5M5 12l7-7 7 7"></path>
+                  </svg>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Live Audits Section -->
+          <div class="feed-section">
+            <div class="feed-header">
+              <div class="feed-title">
+                <span class="status-dot pulse" style="background:var(--col-pass)"></span>
+                <span>Live Audit Stream (3s poll)</span>
+              </div>
+              <span id="feedLiveCount" style="color:var(--text-muted); font-size:12px;">0 audits</span>
+            </div>
+            <div id="liveFeedList" style="display:flex; flex-direction:column; gap:8px;"></div>
+          </div>
         </div>
-        <p class="card-subtext">
-          Trigger the full agent loop (Jev decision, Gate, Tools, and Audit) on an analyzed patient media scan.
+
+        <!-- VIEW: THREAD / AUDIT DETAIL -->
+        <div id="viewThread" class="thread-view hidden"></div>
+
+        <!-- VIEW: AGENTS -->
+        <div id="viewAgents" class="agents-view hidden">
+          <div class="agents-header">
+            <h1 style="margin:0; font-size:24px; font-weight:700; letter-spacing:-.025em;">Agent Workflows</h1>
+            <button class="btn-pill btn-subtle" onclick="App.setView('home')">Back to Stream</button>
+          </div>
+          <div class="agents-table-box">
+            <div class="agent-row">
+              <span class="agent-avatar" style="background:#27272b; color:#6fcf97;">IM</span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-weight:600;">Imaging Scan Workflow</div>
+                <div style="color:var(--text-muted); font-size:12.5px;">Healthcare • Jev + Gemini + Gate + Tools</div>
+              </div>
+              <div style="text-align:right;">
+                <div id="agentImagingAudits" style="font-weight:600; font-variant-numeric:tabular-nums;">Connected</div>
+                <div style="color:var(--col-pass); font-size:12px;">Active & Auditing</div>
+              </div>
+            </div>
+            <div class="agent-row">
+              <span class="agent-avatar" style="background:#27272b; color:#8e8e96;">AD</span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-weight:600;">Ambulance Dispatch</div>
+                <div style="color:var(--text-muted); font-size:12.5px;">Emergency Logistics</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:500; color:var(--text-dim);">Not connected</div>
+                <div style="color:var(--text-muted); font-size:12px;">Waiting for service</div>
+              </div>
+            </div>
+            <div class="agent-row">
+              <span class="agent-avatar" style="background:#27272b; color:#8e8e96;">BE</span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-weight:600;">Brain Explorer Radar</div>
+                <div style="color:var(--text-muted); font-size:12.5px;">Neuroimaging Intelligence</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:500; color:var(--text-dim);">Not connected</div>
+                <div style="color:var(--text-muted); font-size:12px;">Waiting for service</div>
+              </div>
+            </div>
+            <div class="agent-row">
+              <span class="agent-avatar" style="background:#27272b; color:#8e8e96;">SH</span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-weight:600;">Core Self-Heal Engine</div>
+                <div style="color:var(--text-muted); font-size:12.5px;">Fault Detection & Healing</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:500; color:var(--text-dim);">Not connected</div>
+                <div style="color:var(--text-muted); font-size:12px;">Waiting for service</div>
+              </div>
+            </div>
+            <div class="agent-row">
+              <span class="agent-avatar" style="background:#27272b; color:#8e8e96;">SB</span>
+              <div style="flex:1; min-width:0;">
+                <div style="font-weight:600;">Spec Builder</div>
+                <div style="color:var(--text-muted); font-size:12.5px;">Architecture & Tests</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:500; color:var(--text-dim);">Not connected</div>
+                <div style="color:var(--text-muted); font-size:12px;">Waiting for service</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW: SETTINGS -->
+        <div id="viewSettings" class="settings-view hidden">
+          <nav class="settings-nav">
+            <button class="settings-nav-btn active" id="tabSetRules" onclick="App.setSettingsTab('rules')">Decision Rules</button>
+            <button class="settings-nav-btn" id="tabSetKeys" onclick="App.setSettingsTab('keys')">API Keys</button>
+            <button class="settings-nav-btn" id="tabSetHealth" onclick="App.setSettingsTab('health')">Services & Kill Switch</button>
+          </nav>
+          <div class="settings-pane">
+            
+            <!-- Rules Subtab -->
+            <div id="paneSetRules">
+              <div class="setting-group">
+                <span class="setting-label">Safety Gate Threshold (Noul)</span>
+                <p class="setting-desc">Jev decision must meet or exceed this safety threshold to execute write actions automatically.</p>
+                <div style="display:flex; gap:10px; align-items:center;">
+                  <input type="text" value="0.90 (90%)" readonly style="width:200px; height:40px; padding:0 14px; border:1px solid var(--border-inner); border-radius:8px; background:var(--bg-dark-input); color:var(--text);">
+                  <span style="font-size:12px; color:var(--col-pass);">Enforced by src/control/gate.ts</span>
+                </div>
+              </div>
+              <div class="setting-group">
+                <span class="setting-label">Policy Level</span>
+                <p class="setting-desc">Current policy level loaded from policy.yaml</p>
+                <input type="text" value="auto (execute >= 0.9, suggest < 0.9)" readonly style="width:100%; height:40px; padding:0 14px; border:1px solid var(--border-inner); border-radius:8px; background:var(--bg-dark-input); color:var(--text);">
+              </div>
+              <div class="setting-group">
+                <span class="setting-label">Treatment Actions Prohibition</span>
+                <p class="setting-desc">Strict zero-execution clinical safety rule: Prescribe, Dose, and Diagnose are never executed.</p>
+                <span class="tag-badge tag-pass">Guaranteed by Registry & Jev</span>
+              </div>
+            </div>
+
+            <!-- Keys Subtab -->
+            <div id="paneSetKeys" class="hidden">
+              <div class="setting-group">
+                <span class="setting-label">Admin Session Key (X-Admin-Key)</span>
+                <p class="setting-desc">Used to authenticate all requests to <code>/audit</code>, <code>/control/stop</code>, <code>/control/start</code>, and <code>/command</code>. Kept securely in <code>sessionStorage</code>.</p>
+                <div style="display:flex; gap:10px; margin-bottom:12px;">
+                  <input id="settingsAdminKeyInput" type="password" placeholder="Enter X-Admin-Key" style="flex:1; height:40px; padding:0 14px; border:1px solid var(--border-inner); border-radius:8px; background:var(--bg-dark-input); color:var(--text);">
+                  <button class="btn-pill btn-success" onclick="App.saveAdminKeyFromSettings()">Save Key</button>
+                  <button class="btn-pill btn-danger" onclick="App.clearAdminKey()">Clear</button>
+                </div>
+                <div id="settingsKeyStatus" style="font-size:12px; color:var(--text-muted);"></div>
+              </div>
+            </div>
+
+            <!-- Health Subtab -->
+            <div id="paneSetHealth" class="hidden">
+              <div class="setting-group">
+                <span class="setting-label">Connected Microservices</span>
+                <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+                  <div style="display:flex; justify-content:space-between; padding:10px; border-radius:8px; background:var(--bg-dark-input); border:1px solid var(--border-inner);">
+                    <span>Backend Express API (/api/health)</span>
+                    <span id="setHealthBackend" class="tag-badge tag-pass">UP</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding:10px; border-radius:8px; background:var(--bg-dark-input); border:1px solid var(--border-inner);">
+                    <span>ML Engine Service (/health)</span>
+                    <span id="setHealthMl" class="tag-badge tag-block">DOWN</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; padding:10px; border-radius:8px; background:var(--bg-dark-input); border:1px solid var(--border-inner);">
+                    <span>Intelligence Engine (/)</span>
+                    <span id="setHealthIntel" class="tag-badge tag-pass">UP</span>
+                  </div>
+                </div>
+              </div>
+              <div class="setting-group">
+                <span class="setting-label">Emergency Kill Switch Controls</span>
+                <p class="setting-desc">Halt execution across all agent loops immediately or resume pending queues.</p>
+                <div style="display:flex; gap:10px;">
+                  <button class="btn-pill btn-danger" onclick="App.setKillSwitch('stop')">🛑 Emergency Stop</button>
+                  <button class="btn-pill btn-success" onclick="App.setKillSwitch('start')">▶️ Resume Agent</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <!-- Admin Key Modal (Design Export Style) -->
+  <div id="authModal" class="sheet-overlay hidden">
+    <div class="sheet-dialog" onclick="event.stopPropagation()">
+      <div class="sheet-header">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <h2 style="margin:0; font-size:18px; font-weight:700; letter-spacing:-.02em;">🔑 Administrator Authentication</h2>
+          <span style="font-size:12.5px; color:var(--text-muted);">Enter the MediCluster X-Admin-Key</span>
+        </div>
+        <button class="icon-btn" onclick="App.closeAuthModal()">✕</button>
+      </div>
+      <div class="sheet-body">
+        <p style="margin:0; font-size:13px; color:var(--text-secondary); line-height:1.6;">
+          An admin key is required to view the live audit feed, toggle the kill switch, and reprocess patient media scans. The key is kept strictly in <code>sessionStorage</code> for this browser tab only.
         </p>
-        <form id="reprocessForm" onsubmit="handleReprocess(event)">
-          <div class="input-row">
-            <input type="text" id="reprocessMediaId" placeholder="Enter Media ID (e.g. m1)" required>
-            <button type="submit" id="btnReprocess" class="btn btn-primary">Reprocess</button>
-          </div>
-        </form>
-        <div id="reprocessResult" class="banner hidden"></div>
+        <label style="display:flex; flex-direction:column; gap:8px;">
+          <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">X-Admin-Key</span>
+          <input id="modalAdminKeyInput" type="password" placeholder="e.g. admin-key-..." style="height:44px; border:1px solid var(--border-inner); border-radius:12px; background:var(--bg-dark-input); padding:0 14px; outline:none; color:var(--text);">
+        </label>
       </div>
-
-    </div>
-
-    <!-- Main Card: Live Audit Feed -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">
-          <span class="pulse-dot" id="liveDot"></span>
-          <span>Live Audit Feed</span>
-          <span id="feedCountBadge" class="badge badge-muted" style="margin-left:6px;">0 events</span>
-        </div>
-        <div style="display:flex; gap:8px;">
-          <button id="btnTogglePolling" class="btn btn-outline btn-sm">Pause Polling</button>
-          <button id="btnRefreshAudit" class="btn btn-primary btn-sm">Poll Now</button>
-        </div>
+      <div class="sheet-footer">
+        <button class="btn-pill btn-subtle" onclick="App.clearAdminKey()">Clear</button>
+        <button class="btn-pill btn-subtle" onclick="App.closeAuthModal()">Cancel</button>
+        <button class="btn-pill btn-success" onclick="App.saveAdminKeyFromModal()">Save & Connect</button>
       </div>
-
-      <!-- Feed Toolbar -->
-      <div class="feed-toolbar">
-        <div class="feed-filters">
-          <span style="font-size:12px; color:var(--text-muted); margin-right:4px;">Outcome:</span>
-          <button class="filter-btn active" data-filter="all">All</button>
-          <button class="filter-btn" data-filter="executed">Executed</button>
-          <button class="filter-btn" data-filter="review">Review</button>
-          <button class="filter-btn" data-filter="skipped">Skipped</button>
-          <button class="filter-btn" data-filter="pending">Pending</button>
-          <button class="filter-btn" data-filter="failed">Failed</button>
-          <button class="filter-btn" data-filter="blocked">Blocked</button>
-        </div>
-        <div style="min-width: 200px;">
-          <input type="text" id="auditSearchInput" placeholder="Filter by Media ID, event, step..." style="padding:4px 8px; font-size:12px;">
-        </div>
-      </div>
-
-      <!-- Feed Container -->
-      <div id="auditList" class="audit-list">
-        <div class="empty-state">
-          <div class="empty-state-icon">📋</div>
-          <div>Loading audit feed...</div>
-        </div>
-      </div>
-    </div>
-
-  </main>
-
-  <!-- Admin Key Modal -->
-  <div id="authModal" class="modal-backdrop hidden">
-    <div class="modal-card">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3 style="font-size:16px;">🔑 Admin Authentication</h3>
-        <button class="btn btn-outline btn-sm" onclick="closeAuthModal()">✕</button>
-      </div>
-      <p class="card-subtext">
-        Enter the MediCluster <code>X-Admin-Key</code>. This key is stored securely in <code>sessionStorage</code> for this browser tab only and used to authenticate all administrative endpoints.
-      </p>
-      <form id="authForm" onsubmit="saveAuthKey(event)">
-        <div style="display:flex; flex-direction:column; gap:12px;">
-          <input type="password" id="adminKeyInput" placeholder="Paste X-Admin-Key here..." required autocomplete="off">
-          <div style="display:flex; justify-content:space-between; gap:8px;">
-            <button type="button" class="btn btn-danger btn-sm" onclick="clearAuthKey()">Clear Key</button>
-            <div style="display:flex; gap:8px;">
-              <button type="button" class="btn btn-outline btn-sm" onclick="closeAuthModal()">Cancel</button>
-              <button type="submit" class="btn btn-primary btn-sm">Save & Connect</button>
-            </div>
-          </div>
-        </div>
-      </form>
     </div>
   </div>
 
+  <!-- Toast Notification -->
+  <div id="toastNotification" class="floating-toast hidden">
+    <span id="toastMsg"></span>
+  </div>
+
   <script>
-    // Console State
+    // MediCluster Command Center State
     const App = {
       adminKey: sessionStorage.getItem('adminKey') || '',
-      polling: true,
-      pollInterval: 3000,
-      pollTimer: null,
-      health: { stopped: false, services: {} },
+      view: 'home',
+      activeTabId: 'home',
+      tabs: [{ id: 'home', title: 'New audit' }],
       audits: [],
-      filter: 'all',
+      health: { status: 'ok', stopped: false, services: {} },
+      groupsOpen: { review: true, history: true, agents: true },
+      sidebarCollapsed: false,
       search: '',
-      expandedEvents: new Set()
-    };
+      toastTimer: null,
+      pollTimer: null,
 
-    // DOM Elements
-    const els = {
-      headerAgentBadge: document.getElementById('headerAgentBadge'),
-      headerAuthBadge: document.getElementById('headerAuthBadge'),
-      btnOpenAuth: document.getElementById('btnOpenAuth'),
-      btnThemeToggle: document.getElementById('btnThemeToggle'),
-      globalBanner: document.getElementById('globalBanner'),
-      globalBannerText: document.getElementById('globalBannerText'),
-      healthBackend: document.getElementById('healthBackend'),
-      healthMl: document.getElementById('healthMl'),
-      healthIntel: document.getElementById('healthIntel'),
-      killSwitchBadge: document.getElementById('killSwitchBadge'),
-      killSwitchNote: document.getElementById('killSwitchNote'),
-      btnKillStop: document.getElementById('btnKillStop'),
-      btnKillStart: document.getElementById('btnKillStart'),
-      btnRefreshHealth: document.getElementById('btnRefreshHealth'),
-      reprocessForm: document.getElementById('reprocessForm'),
-      reprocessMediaId: document.getElementById('reprocessMediaId'),
-      btnReprocess: document.getElementById('btnReprocess'),
-      reprocessResult: document.getElementById('reprocessResult'),
-      feedCountBadge: document.getElementById('feedCountBadge'),
-      btnTogglePolling: document.getElementById('btnTogglePolling'),
-      btnRefreshAudit: document.getElementById('btnRefreshAudit'),
-      auditSearchInput: document.getElementById('auditSearchInput'),
-      auditList: document.getElementById('auditList'),
-      liveDot: document.getElementById('liveDot'),
-      authModal: document.getElementById('authModal'),
-      adminKeyInput: document.getElementById('adminKeyInput')
-    };
+      init() {
+        this.initTheme();
+        this.renderTabs();
+        this.updateKeyStatusUI();
+        this.fetchHealth();
+        if (this.adminKey) this.fetchAudits();
+        this.startPolling();
+        this.setupEvents();
+      },
 
-    // Helper: Escapes HTML to prevent XSS
-    function escapeHtml(str) {
-      if (str === null || str === undefined) return '';
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
+      setupEvents() {
+        document.getElementById('btnToggleSidebar').addEventListener('click', () => this.toggleSidebar());
+        document.getElementById('btnSidebarShow').addEventListener('click', () => this.toggleSidebar());
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+          this.search = e.target.value.toLowerCase().trim();
+          this.renderSidebarAudits();
+          this.renderLiveFeed();
+        });
+        document.getElementById('btnNewScan').addEventListener('click', () => {
+          this.setView('home');
+          document.getElementById('composerMediaId').focus();
+        });
+        document.getElementById('btnThemeToggle').addEventListener('click', () => this.toggleTheme());
+      },
 
-    // Helper: Format ISO date string
-    function formatDate(isoStr) {
-      if (!isoStr) return '—';
-      try {
-        const d = new Date(isoStr);
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-      } catch {
-        return isoStr;
-      }
-    }
+      initTheme() {
+        const saved = localStorage.getItem('medicluster_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', saved);
+        document.getElementById('btnThemeToggle').textContent = saved === 'dark' ? '☀️' : '🌙';
+      },
 
-    // Banner notifications
-    function showBanner(text, type = 'danger') {
-      els.globalBanner.className = `banner banner-${type}`;
-      els.globalBannerText.textContent = text;
-      els.globalBanner.classList.remove('hidden');
-    }
-    function hideBanner() {
-      els.globalBanner.classList.add('hidden');
-    }
+      toggleTheme() {
+        const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('medicluster_theme', next);
+        document.getElementById('btnThemeToggle').textContent = next === 'dark' ? '☀️' : '🌙';
+      },
 
-    // Theme Management
-    function initTheme() {
-      const saved = localStorage.getItem('medicluster_theme') || 'dark';
-      document.documentElement.setAttribute('data-theme', saved);
-    }
-    function toggleTheme() {
-      const current = document.documentElement.getAttribute('data-theme') || 'dark';
-      const next = current === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('medicluster_theme', next);
-    }
-    els.btnThemeToggle.addEventListener('click', toggleTheme);
-
-    // Auth Modal & sessionStorage
-    function updateAuthUI() {
-      if (App.adminKey) {
-        els.headerAuthBadge.className = 'badge badge-success';
-        els.headerAuthBadge.textContent = 'Authenticated';
-        els.btnOpenAuth.textContent = 'Key: Configured';
-      } else {
-        els.headerAuthBadge.className = 'badge badge-warning';
-        els.headerAuthBadge.textContent = 'No Admin Key';
-        els.btnOpenAuth.textContent = 'Set Admin Key';
-      }
-    }
-    function openAuthModal() {
-      els.adminKeyInput.value = App.adminKey;
-      els.authModal.classList.remove('hidden');
-      els.adminKeyInput.focus();
-    }
-    function closeAuthModal() {
-      els.authModal.classList.add('hidden');
-    }
-    function saveAuthKey(e) {
-      e.preventDefault();
-      const val = els.adminKeyInput.value.trim();
-      if (!val) return;
-      App.adminKey = val;
-      sessionStorage.setItem('adminKey', val);
-      updateAuthUI();
-      closeAuthModal();
-      hideBanner();
-      fetchAudit();
-    }
-    function clearAuthKey() {
-      App.adminKey = '';
-      sessionStorage.removeItem('adminKey');
-      els.adminKeyInput.value = '';
-      updateAuthUI();
-      closeAuthModal();
-      renderAudits();
-    }
-    els.btnOpenAuth.addEventListener('click', openAuthModal);
-
-    // Authenticated API Fetch Helper
-    async function apiFetch(path, options = {}) {
-      const headers = { ...options.headers };
-      if (App.adminKey) {
-        headers['x-admin-key'] = App.adminKey;
-      }
-      const res = await fetch(path, { ...options, headers });
-      if (res.status === 401) {
-        showBanner('Unauthorized (401): Admin key is invalid or not provided. Click "Set Admin Key" to configure.', 'danger');
-        openAuthModal();
-      }
-      return res;
-    }
-
-    // Health Poller (Public GET /health)
-    async function fetchHealth() {
-      try {
-        const res = await fetch('/health');
-        if (!res.ok) throw new Error(`Health HTTP ${res.status}`);
-        const data = await res.json();
-        App.health = data;
-
-        // Render Service Health Badges
-        const s = data.services || {};
-        els.healthBackend.className = s.backend ? 'badge badge-success' : 'badge badge-danger';
-        els.healthBackend.textContent = s.backend ? 'UP' : 'DOWN';
-
-        els.healthMl.className = s.ml ? 'badge badge-success' : 'badge badge-danger';
-        els.healthMl.textContent = s.ml ? 'UP' : 'DOWN';
-
-        els.healthIntel.className = s.intelligence ? 'badge badge-success' : 'badge badge-danger';
-        els.healthIntel.textContent = s.intelligence ? 'UP' : 'DOWN';
-
-        // Render Kill Switch State
-        if (data.stopped) {
-          els.killSwitchBadge.className = 'badge badge-danger';
-          els.killSwitchBadge.textContent = 'STOPPED';
-          els.killSwitchNote.textContent = 'Agent loop halted. Inbound events are queued.';
-          els.btnKillStop.disabled = true;
-          els.btnKillStart.disabled = false;
-          els.headerAgentBadge.className = 'badge badge-danger';
-          els.headerAgentBadge.textContent = 'STOPPED';
+      toggleSidebar() {
+        this.sidebarCollapsed = !this.sidebarCollapsed;
+        const shell = document.getElementById('appShell');
+        const showBtn = document.getElementById('btnSidebarShow');
+        if (this.sidebarCollapsed) {
+          shell.classList.add('sidebar-collapsed');
+          document.getElementById('sidebarWrapper').classList.add('hidden');
+          showBtn.classList.remove('hidden');
         } else {
-          els.killSwitchBadge.className = 'badge badge-success';
-          els.killSwitchBadge.textContent = 'RUNNING';
-          els.killSwitchNote.textContent = 'Agent is processing events normally.';
-          els.btnKillStop.disabled = false;
-          els.btnKillStart.disabled = true;
-          els.headerAgentBadge.className = 'badge badge-success';
-          els.headerAgentBadge.textContent = 'RUNNING';
+          shell.classList.remove('sidebar-collapsed');
+          document.getElementById('sidebarWrapper').classList.remove('hidden');
+          showBtn.classList.add('hidden');
         }
-      } catch (err) {
-        els.headerAgentBadge.className = 'badge badge-danger';
-        els.headerAgentBadge.textContent = 'OFFLINE';
-      }
-    }
-    els.btnRefreshHealth.addEventListener('click', fetchHealth);
+      },
 
-    // Stop / Start Kill Switch Actions
-    async function setKillSwitch(action) {
-      if (!App.adminKey) {
-        showBanner('Admin key required to trigger kill switch', 'warning');
-        openAuthModal();
-        return;
-      }
-      try {
-        const path = action === 'stop' ? '/control/stop' : '/control/start';
-        const res = await apiFetch(path, { method: 'POST' });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          showBanner(`Kill switch action failed: ${err.error || res.statusText}`, 'danger');
+      toggleGroup(grp) {
+        this.groupsOpen[grp] = !this.groupsOpen[grp];
+        const el = document.getElementById(grp === 'review' ? 'treeReviewList' : grp === 'history' ? 'treeHistoryList' : 'treeAgentsList');
+        const caret = document.getElementById(grp === 'review' ? 'caretReview' : grp === 'history' ? 'caretHistory' : 'caretAgents');
+        if (el) el.classList.toggle('hidden', !this.groupsOpen[grp]);
+        if (caret) caret.style.transform = this.groupsOpen[grp] ? 'none' : 'rotate(-90deg)';
+      },
+
+      showToast(msg) {
+        clearTimeout(this.toastTimer);
+        const t = document.getElementById('toastNotification');
+        document.getElementById('toastMsg').textContent = msg;
+        t.classList.remove('hidden');
+        this.toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
+      },
+
+      openAuthModal() {
+        document.getElementById('modalAdminKeyInput').value = this.adminKey;
+        document.getElementById('authModal').classList.remove('hidden');
+        document.getElementById('modalAdminKeyInput').focus();
+      },
+      closeAuthModal() {
+        document.getElementById('authModal').classList.add('hidden');
+      },
+      saveAdminKeyFromModal() {
+        const k = document.getElementById('modalAdminKeyInput').value.trim();
+        if (!k) return;
+        this.setAdminKey(k);
+        this.closeAuthModal();
+      },
+      saveAdminKeyFromSettings() {
+        const k = document.getElementById('settingsAdminKeyInput').value.trim();
+        if (!k) return;
+        this.setAdminKey(k);
+      },
+      setAdminKey(k) {
+        this.adminKey = k;
+        sessionStorage.setItem('adminKey', k);
+        this.updateKeyStatusUI();
+        this.showToast('Admin key saved to sessionStorage');
+        this.fetchAudits();
+      },
+      clearAdminKey() {
+        this.adminKey = '';
+        sessionStorage.removeItem('adminKey');
+        this.updateKeyStatusUI();
+        this.closeAuthModal();
+        this.showToast('Admin key cleared');
+        this.renderSidebarAudits();
+        this.renderLiveFeed();
+      },
+      updateKeyStatusUI() {
+        const sKey = document.getElementById('settingsKeyStatus');
+        const footKey = document.getElementById('navFootKeys');
+        if (this.adminKey) {
+          const masked = this.adminKey.slice(0, 4) + '••••••••' + this.adminKey.slice(-2);
+          if (sKey) sKey.textContent = `Active key: ${masked}`;
+          if (footKey) footKey.classList.add('active');
+        } else {
+          if (sKey) sKey.textContent = 'No admin key configured.';
+          if (footKey) footKey.classList.remove('active');
+        }
+      },
+
+      async fetchHealth() {
+        try {
+          const res = await fetch('/health');
+          if (!res.ok) return;
+          const data = await res.json();
+          this.health = data;
+
+          const s = data.services || {};
+          const setDot = (id, up) => {
+            const el = document.getElementById(id);
+            if (el) el.className = up ? 'status-dot' : 'status-dot down';
+          };
+          setDot('dotBackend', s.backend);
+          setDot('dotMl', s.ml);
+          setDot('dotIntel', s.intelligence);
+
+          const setHealthTag = (id, up) => {
+            const el = document.getElementById(id);
+            if (el) {
+              el.className = up ? 'tag-badge tag-pass' : 'tag-badge tag-block';
+              el.textContent = up ? 'UP' : 'DOWN';
+            }
+          };
+          setHealthTag('setHealthBackend', s.backend);
+          setHealthTag('setHealthMl', s.ml);
+          setHealthTag('setHealthIntel', s.intelligence);
+
+          // Kill Switch State
+          const isStop = !!data.stopped;
+          const labelKill = document.getElementById('labelKillSwitch');
+          const dotKill = document.getElementById('dotKillSwitch');
+          const bannerDot = document.getElementById('killSwitchBannerDot');
+          const bannerBadge = document.getElementById('killSwitchBannerBadge');
+          const bannerNote = document.getElementById('killSwitchBannerNote');
+          const btnStop = document.getElementById('btnStopAgent');
+          const btnStart = document.getElementById('btnStartAgent');
+
+          if (isStop) {
+            if (labelKill) labelKill.textContent = 'STOPPED';
+            if (dotKill) dotKill.className = 'status-dot down pulse';
+            if (bannerDot) bannerDot.className = 'status-dot down';
+            if (bannerBadge) {
+              bannerBadge.className = 'tag-badge tag-block';
+              bannerBadge.textContent = 'STOPPED';
+            }
+            if (bannerNote) bannerNote.textContent = 'Kill switch activated: Agent execution is halted. Incoming events are queued.';
+            if (btnStop) btnStop.disabled = true;
+            if (btnStart) btnStart.disabled = false;
+          } else {
+            if (labelKill) labelKill.textContent = 'RUNNING';
+            if (dotKill) dotKill.className = 'status-dot pulse';
+            if (bannerDot) bannerDot.className = 'status-dot';
+            if (bannerBadge) {
+              bannerBadge.className = 'tag-badge tag-pass';
+              bannerBadge.textContent = 'Active';
+            }
+            if (bannerNote) bannerNote.textContent = 'Agent is running and processing events. Safety gate threshold: 0.90 noul.';
+            if (btnStop) btnStop.disabled = false;
+            if (btnStart) btnStart.disabled = true;
+          }
+        } catch (err) {
+          console.error('Health fetch error:', err);
+        }
+      },
+
+      async fetchAudits() {
+        if (!this.adminKey) return;
+        try {
+          const res = await fetch('/audit?limit=50', {
+            headers: { 'x-admin-key': this.adminKey }
+          });
+          if (res.status === 401) {
+            this.showToast('Unauthorized: Check your Admin Key');
+            return;
+          }
+          if (!res.ok) return;
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            this.audits = data;
+            this.renderSidebarAudits();
+            this.renderLiveFeed();
+            // If active tab is an audit, refresh its details
+            if (this.view.startsWith('audit:')) {
+              this.renderThreadView(this.view.split(':')[1]);
+            }
+          }
+        } catch (err) {
+          console.error('Audit fetch error:', err);
+        }
+      },
+
+      startPolling() {
+        if (this.pollTimer) clearInterval(this.pollTimer);
+        this.pollTimer = setInterval(() => {
+          this.fetchHealth();
+          if (this.adminKey) this.fetchAudits();
+        }, 3000);
+      },
+
+      async setKillSwitch(action) {
+        if (!this.adminKey) {
+          this.showToast('Admin key required to trigger kill switch');
+          this.openAuthModal();
           return;
         }
-        const data = await res.json();
-        showBanner(action === 'stop' ? 'Agent halted via emergency kill switch.' : 'Agent resumed; processing queued events.', 'success');
-        await fetchHealth();
-      } catch (err) {
-        showBanner(`Network error setting kill switch: ${err.message}`, 'danger');
-      }
-    }
-    els.btnKillStop.addEventListener('click', () => setKillSwitch('stop'));
-    els.btnKillStart.addEventListener('click', () => setKillSwitch('start'));
+        try {
+          const path = action === 'stop' ? '/control/stop' : '/control/start';
+          const res = await fetch(path, {
+            method: 'POST',
+            headers: { 'x-admin-key': this.adminKey }
+          });
+          if (res.status === 401) {
+            this.showToast('Unauthorized: Admin key rejected');
+            this.openAuthModal();
+            return;
+          }
+          if (res.ok) {
+            this.showToast(action === 'stop' ? 'Agent stopped (Kill switch activated)' : 'Agent resumed (Draining queued events)');
+            await this.fetchHealth();
+          }
+        } catch (err) {
+          this.showToast('Network error setting kill switch');
+        }
+      },
 
-    // Reprocess Media Scan (POST /command)
-    async function handleReprocess(e) {
-      e.preventDefault();
-      const mediaId = els.reprocessMediaId.value.trim();
-      if (!mediaId) return;
+      async handleReprocess(e) {
+        e.preventDefault();
+        const input = document.getElementById('composerMediaId');
+        const mediaId = input.value.trim();
+        if (!mediaId) return;
 
-      if (!App.adminKey) {
-        showBanner('Admin key required to reprocess scans', 'warning');
-        openAuthModal();
-        return;
-      }
+        if (!this.adminKey) {
+          this.showToast('Admin key required to reprocess scans');
+          this.openAuthModal();
+          return;
+        }
 
-      els.btnReprocess.disabled = true;
-      els.btnReprocess.textContent = 'Reprocessing...';
-      els.reprocessResult.classList.add('hidden');
+        const btn = document.getElementById('btnComposerSend');
+        btn.disabled = true;
+        try {
+          const res = await fetch('/command', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-admin-key': this.adminKey
+            },
+            body: JSON.stringify({ type: 'reprocess', mediaId })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 401) {
+            this.showToast('Unauthorized: Check Admin Key');
+            this.openAuthModal();
+          } else if (res.ok) {
+            this.showToast(`Reprocess complete: Outcome = ${data.outcome}`);
+            input.value = '';
+            await this.fetchAudits();
+          } else {
+            this.showToast(`Reprocess error (${res.status}): ${data.error || 'Failed'}`);
+          }
+        } catch (err) {
+          this.showToast(`Network error: ${err.message}`);
+        } finally {
+          btn.disabled = false;
+        }
+      },
 
-      try {
-        const res = await apiFetch('/command', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ type: 'reprocess', mediaId })
+      renderSidebarAudits() {
+        const reviewList = document.getElementById('treeReviewList');
+        const historyList = document.getElementById('treeHistoryList');
+        const reviewBadge = document.getElementById('reviewCountBadge');
+        const historyBadge = document.getElementById('historyCountBadge');
+
+        const filtered = this.audits.filter(a => {
+          if (!this.search) return true;
+          return JSON.stringify(a).toLowerCase().includes(this.search);
         });
-        const data = await res.json().catch(() => ({}));
 
-        if (!res.ok) {
-          els.reprocessResult.className = 'banner banner-danger';
-          els.reprocessResult.textContent = `Reprocess failed (${res.status}): ${data.error || res.statusText}`;
+        const pending = filtered.filter(a => a.outcome === 'pending' || a.outcome === 'review');
+        const history = filtered.filter(a => a.outcome !== 'pending' && a.outcome !== 'review');
+
+        if (reviewBadge) reviewBadge.textContent = pending.length;
+        if (historyBadge) historyBadge.textContent = history.length;
+
+        const buildItems = (list) => {
+          if (!list.length) return '<div style="padding:6px 14px; font-size:12px; color:var(--text-dim);">None</div>';
+          return list.map((a, i) => {
+            const isLast = i === list.length - 1;
+            const mid = a.event?.mediaId || a.event?.data?._id || a._id.slice(0, 8);
+            const title = `Scan ${mid} (${a.outcome || 'audit'})`;
+            const isActive = this.view === `audit:${a._id}`;
+            const dotCol = a.outcome === 'executed' ? 'var(--col-pass)' : a.outcome === 'review' || a.outcome === 'pending' ? 'var(--col-escalate)' : 'var(--col-block)';
+            return `
+              <a href="#" class="tree-item-link ${isActive ? 'active' : ''}" onclick="event.preventDefault(); App.openAudit('${a._id}')">
+                <span class="elbow-line" style="top:0; height:${isLast ? '50%' : '100%'};"></span>
+                <span class="status-dot" style="background:${dotCol}; flex:none;"></span>
+                <span style="overflow:hidden; text-overflow:ellipsis;">${this.escapeHtml(title)}</span>
+              </a>
+            `;
+          }).join('');
+        };
+
+        if (reviewList) reviewList.innerHTML = buildItems(pending);
+        if (historyList) historyList.innerHTML = buildItems(history);
+      },
+
+      renderLiveFeed() {
+        const listEl = document.getElementById('liveFeedList');
+        const countEl = document.getElementById('feedLiveCount');
+        const imagingAudits = document.getElementById('agentImagingAudits');
+
+        const filtered = this.audits.filter(a => {
+          if (!this.search) return true;
+          return JSON.stringify(a).toLowerCase().includes(this.search);
+        });
+
+        if (countEl) countEl.textContent = `${filtered.length} audits`;
+        if (imagingAudits) imagingAudits.textContent = `${this.audits.length} audits`;
+
+        if (!filtered.length) {
+          listEl.innerHTML = `
+            <div style="padding:32px 16px; text-align:center; color:var(--text-muted); background:var(--bg-card); border-radius:14px; border:1px solid var(--border-main);">
+              ${this.adminKey ? 'No audit logs found matching criteria.' : '🔑 Enter Admin Key to view live audits.'}
+            </div>
+          `;
+          return;
+        }
+
+        listEl.innerHTML = filtered.map(a => {
+          const outcome = (a.outcome || 'pending').toLowerCase();
+          const mid = a.event?.mediaId || a.event?.data?._id || a._id.slice(0, 8);
+          let tagClass = 'tag-subtle';
+          let score = 90;
+          let offset = 9.4; // 94.25 * (1 - 0.90)
+
+          if (outcome === 'executed') {
+            tagClass = 'tag-pass';
+            score = 98;
+            offset = 1.8;
+          } else if (outcome === 'review' || outcome === 'pending') {
+            tagClass = 'tag-escalate';
+            score = 65;
+            offset = 33.0;
+          } else if (outcome === 'blocked' || outcome === 'failed') {
+            tagClass = 'tag-block';
+            score = 0;
+            offset = 94.25;
+          }
+
+          const stepsCount = Array.isArray(a.steps) ? a.steps.length : 0;
+          const timeAgo = this.formatTimeAgo(a.startedAt);
+
+          return `
+            <div class="audit-card-item" onclick="App.openAudit('${a._id}')">
+              <div class="audit-card-left">
+                <div class="audit-score-gauge-mini">
+                  <svg viewBox="0 0 36 36" width="36" height="36">
+                    <circle cx="18" cy="18" r="15" fill="none" stroke="#1c1c1f" stroke-width="3.5"></circle>
+                    <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="94.25" stroke-dashoffset="${offset}" transform="rotate(-90 18 18)" style="color:${score >= 85 ? 'var(--col-pass)' : score >= 50 ? 'var(--col-escalate)' : 'var(--col-block)'}"></circle>
+                  </svg>
+                  <span class="audit-score-num">${score}</span>
+                </div>
+                <div class="audit-card-meta">
+                  <span class="audit-card-title">Patient Scan Media: <strong>${this.escapeHtml(mid)}</strong></span>
+                  <div class="audit-card-sub">
+                    <span class="tag-badge ${tagClass}">${this.escapeHtml(outcome)}</span>
+                    ${a.reason ? `<span>reason: ${this.escapeHtml(a.reason)}</span>` : ''}
+                    <span>• ${stepsCount} steps</span>
+                  </div>
+                </div>
+              </div>
+              <div style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono); white-space:nowrap;">
+                ${this.escapeHtml(timeAgo)}
+              </div>
+            </div>
+          `;
+        }).join('');
+      },
+
+      openAudit(id) {
+        const audit = this.audits.find(a => a._id === id);
+        const mid = audit?.event?.mediaId || id.slice(0, 6);
+        const tabTitle = `Audit ${mid}`;
+        const tabId = `audit:${id}`;
+
+        if (!this.tabs.some(t => t.id === tabId)) {
+          this.tabs.push({ id: tabId, title: tabTitle });
+        }
+        this.activeTabId = tabId;
+        this.renderTabs();
+        this.renderThreadView(id);
+      },
+
+      renderThreadView(id) {
+        this.setView(`audit:${id}`);
+        const container = document.getElementById('viewThread');
+        const audit = this.audits.find(a => a._id === id);
+
+        if (!audit) {
+          container.innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-muted);">Audit ${this.escapeHtml(id)} not found.</div>`;
+          return;
+        }
+
+        const outcome = (audit.outcome || 'unknown').toLowerCase();
+        let score = 90;
+        let offset = 9.4;
+        let decTitle = 'Executed';
+        let decCol = 'var(--col-pass)';
+
+        if (outcome === 'executed') {
+          score = 98;
+          offset = 1.8;
+          decTitle = 'Passed & Executed';
+          decCol = 'var(--col-pass)';
+        } else if (outcome === 'review' || outcome === 'pending') {
+          score = 65;
+          offset = 33.0;
+          decTitle = 'Needs Review';
+          decCol = 'var(--col-escalate)';
+        } else if (outcome === 'blocked' || outcome === 'failed') {
+          score = 0;
+          offset = 94.25;
+          decTitle = 'Blocked by Gate';
+          decCol = 'var(--col-block)';
+        } else if (outcome === 'skipped') {
+          score = 50;
+          offset = 47.1;
+          decTitle = 'Skipped';
+          decCol = 'var(--text-muted)';
+        }
+
+        const mid = audit.event?.mediaId || audit.event?.data?._id || '—';
+        const started = audit.startedAt ? new Date(audit.startedAt).toLocaleString() : '—';
+        const steps = Array.isArray(audit.steps) ? audit.steps : [];
+
+        // Build Steps HTML
+        let stepsHtml = steps.map((s, idx) => {
+          const kind = s.kind || 'step';
+          const at = s.at ? new Date(s.at).toLocaleTimeString() : '';
+          let body = '';
+
+          if (kind === 'jev') {
+            const ans = s.data?.answers || {};
+            body = '<div class="jev-grid">';
+
+            // Action Decision
+            if (ans.action) {
+              const act = ans.action;
+              const probs = act.probabilities || {};
+              body += `
+                <div class="jev-card">
+                  <div class="jev-card-header">
+                    <span class="jev-card-title">Action Decision</span>
+                    <span class="tag-badge tag-pass">${this.escapeHtml(act.choice || 'none')}</span>
+                  </div>
+              `;
+              for (const [k, p] of Object.entries(probs)) {
+                const pct = Math.round((Number(p) || 0) * 100);
+                const isChosen = k === act.choice;
+                body += `
+                  <div class="prob-row">
+                    <div class="prob-labels">
+                      <span style="font-weight:${isChosen ? '600' : '400'}; color:${isChosen ? 'var(--text)' : 'var(--text-muted)'}">${this.escapeHtml(k)}</span>
+                      <span style="font-family:var(--font-mono);">${pct}%</span>
+                    </div>
+                    <div class="prob-track">
+                      <div class="prob-fill ${isChosen ? 'chosen' : ''}" style="width:${pct}%;"></div>
+                    </div>
+                  </div>
+                `;
+              }
+              body += '</div>';
+            }
+
+            // Urgency
+            if (ans.urgency) {
+              const urg = ans.urgency;
+              const probs = urg.probabilities || {};
+              body += `
+                <div class="jev-card">
+                  <div class="jev-card-header">
+                    <span class="jev-card-title">Urgency</span>
+                    <span class="tag-badge tag-escalate">${this.escapeHtml(urg.choice || urg.score || '—')}</span>
+                  </div>
+              `;
+              for (const [k, p] of Object.entries(probs)) {
+                const pct = Math.round((Number(p) || 0) * 100);
+                const isChosen = k === urg.choice;
+                body += `
+                  <div class="prob-row">
+                    <div class="prob-labels">
+                      <span style="font-weight:${isChosen ? '600' : '400'}; color:${isChosen ? 'var(--text)' : 'var(--text-muted)'}">${this.escapeHtml(k)}</span>
+                      <span style="font-family:var(--font-mono);">${pct}%</span>
+                    </div>
+                    <div class="prob-track">
+                      <div class="prob-fill ${isChosen ? 'chosen' : ''}" style="width:${pct}%;"></div>
+                    </div>
+                  </div>
+                `;
+              }
+              body += '</div>';
+            }
+
+            // Act Now Safety (Noul)
+            if (ans.act_now) {
+              const actNow = ans.act_now;
+              const noul = Number(actNow.noul ?? 0);
+              const pct = Math.round(noul * 100);
+              body += `
+                <div class="jev-card">
+                  <div class="jev-card-header">
+                    <span class="jev-card-title">Act Now Safety</span>
+                    <span class="tag-badge ${noul >= 0.9 ? 'tag-pass' : 'tag-block'}">Noul: ${noul.toFixed(3)}</span>
+                  </div>
+                  <div class="prob-row">
+                    <div class="prob-labels">
+                      <span>Threshold (&ge;0.90)</span>
+                      <span style="font-family:var(--font-mono);">${pct}%</span>
+                    </div>
+                    <div class="prob-track">
+                      <div class="prob-fill ${noul >= 0.9 ? 'chosen' : ''}" style="width:${pct}%;"></div>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }
+
+            body += '</div>';
+          } else if (kind === 'gate' || kind === 'review_gate') {
+            const g = s.data || {};
+            body = `
+              <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:13px;">
+                <span>Verdict:</span>
+                <span class="tag-badge ${g.verdict === 'allow' ? 'tag-pass' : g.verdict === 'suggest' ? 'tag-escalate' : 'tag-block'}">${this.escapeHtml(g.verdict || 'none')}</span>
+                ${g.reason ? `<span style="color:var(--text-muted);">Reason: <code>${this.escapeHtml(g.reason)}</code></span>` : ''}
+                ${g.key ? `<span style="color:var(--text-dim); font-family:var(--font-mono); font-size:11px;">Key: ${this.escapeHtml(g.key)}</span>` : ''}
+              </div>
+            `;
+          } else {
+            body = `<pre class="code-viewer">${this.escapeHtml(JSON.stringify(s.data, null, 2))}</pre>`;
+          }
+
+          return `
+            <div class="step-box">
+              <div class="step-box-header">
+                <span class="step-title-badge">${idx + 1}. ${this.escapeHtml(kind)}</span>
+                <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">${this.escapeHtml(at)}</span>
+              </div>
+              ${body}
+            </div>
+          `;
+        }).join('');
+
+        container.innerHTML = `
+          <div class="thread-header-score">
+            <div class="score-circle-lg">
+              <svg viewBox="0 0 36 36" width="56" height="56">
+                <circle cx="18" cy="18" r="15" fill="none" stroke="#27272b" stroke-width="3.5"></circle>
+                <circle cx="18" cy="18" r="15" fill="none" stroke="${decCol}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="94.25" stroke-dashoffset="${offset}" transform="rotate(-90 18 18)"></circle>
+              </svg>
+              <b style="color:${decCol}">${score}</b>
+            </div>
+            <div>
+              <div class="thread-header-title">${this.escapeHtml(decTitle)}</div>
+              <div class="thread-header-sub">Media Scan <strong>${this.escapeHtml(mid)}</strong> • Started at ${this.escapeHtml(started)}</div>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="font-size:14px; font-weight:700;">Execution Steps & Jev Judgement</div>
+            ${stepsHtml || '<div style="color:var(--text-muted); font-size:13px;">No execution steps recorded.</div>'}
+          </div>
+
+          <details style="margin-top:12px;">
+            <summary style="font-size:12.5px; color:var(--text-muted); cursor:pointer;">View Raw Audit Event JSON</summary>
+            <pre class="code-viewer" style="margin-top:8px;">${this.escapeHtml(JSON.stringify(audit, null, 2))}</pre>
+          </details>
+        `;
+      },
+
+      setView(v) {
+        this.view = v;
+        const vHome = document.getElementById('viewHome');
+        const vThread = document.getElementById('viewThread');
+        const vAgents = document.getElementById('viewAgents');
+        const vSettings = document.getElementById('viewSettings');
+
+        vHome.classList.add('hidden');
+        vThread.classList.add('hidden');
+        vAgents.classList.add('hidden');
+        vSettings.classList.add('hidden');
+
+        if (v === 'home') {
+          vHome.classList.remove('hidden');
+          this.activeTabId = 'home';
+        } else if (v.startsWith('audit:')) {
+          vThread.classList.remove('hidden');
+          this.activeTabId = v;
+        } else if (v === 'agents') {
+          vAgents.classList.remove('hidden');
+          this.activeTabId = 'agents';
+          if (!this.tabs.some(t => t.id === 'agents')) {
+            this.tabs.push({ id: 'agents', title: 'Agents' });
+          }
+        } else if (v.startsWith('settings')) {
+          vSettings.classList.remove('hidden');
+          this.activeTabId = 'settings';
+          const sub = v.split(':')[1] || 'rules';
+          this.setSettingsTab(sub);
+          if (!this.tabs.some(t => t.id === 'settings')) {
+            this.tabs.push({ id: 'settings', title: 'Settings' });
+          }
+        }
+        this.renderTabs();
+        this.renderSidebarAudits();
+      },
+
+      setSettingsTab(sub) {
+        ['rules', 'keys', 'health'].forEach(k => {
+          const btn = document.getElementById('tabSet' + k.charAt(0).toUpperCase() + k.slice(1));
+          const pane = document.getElementById('paneSet' + k.charAt(0).toUpperCase() + k.slice(1));
+          if (btn) btn.classList.toggle('active', k === sub);
+          if (pane) pane.classList.toggle('hidden', k !== sub);
+        });
+      },
+
+      renderTabs() {
+        const track = document.getElementById('tabsTrack');
+        if (!track) return;
+        track.innerHTML = this.tabs.map(t => {
+          const isActive = this.activeTabId === t.id;
+          return `
+            <div class="tab-pill ${isActive ? 'active' : ''}" onclick="App.setView('${t.id}')">
+              <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${this.escapeHtml(t.title)}</span>
+              ${t.id !== 'home' ? `<button class="tab-close-btn" onclick="event.stopPropagation(); App.closeTab('${t.id}')">✕</button>` : ''}
+            </div>
+          `;
+        }).join('');
+      },
+
+      openTab(id) {
+        if (!this.tabs.some(t => t.id === id)) {
+          this.tabs.push({ id, title: id === 'home' ? 'New audit' : id });
+        }
+        this.setView(id);
+      },
+
+      closeTab(id) {
+        if (id === 'home') return;
+        this.tabs = this.tabs.filter(t => t.id !== id);
+        if (this.activeTabId === id) {
+          const last = this.tabs[this.tabs.length - 1];
+          this.setView(last ? last.id : 'home');
         } else {
-          els.reprocessResult.className = 'banner banner-success';
-          els.reprocessResult.innerHTML = `<strong>Reprocess complete!</strong> Outcome: <span class="badge badge-success">${escapeHtml(data.outcome)}</span>`;
-          // Refresh audit feed immediately to display the new audit run
-          fetchAudit();
+          this.renderTabs();
         }
-        els.reprocessResult.classList.remove('hidden');
-      } catch (err) {
-        els.reprocessResult.className = 'banner banner-danger';
-        els.reprocessResult.textContent = `Network error: ${err.message}`;
-        els.reprocessResult.classList.remove('hidden');
-      } finally {
-        els.btnReprocess.disabled = false;
-        els.btnReprocess.textContent = 'Reprocess';
-      }
-    }
+      },
 
-    // Live Audit Feed Fetcher (GET /audit)
-    async function fetchAudit() {
-      if (!App.adminKey) {
-        els.auditList.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon">🔒</div>
-            <div>Admin Key required to view live audit logs.</div>
-            <button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="openAuthModal()">Enter Admin Key</button>
-          </div>
-        `;
-        els.feedCountBadge.textContent = '0 events';
-        return;
-      }
-
-      try {
-        const res = await apiFetch('/audit?limit=50');
-        if (!res.ok) return;
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          App.audits = data;
-          renderAudits();
+      formatTimeAgo(isoStr) {
+        if (!isoStr) return 'now';
+        try {
+          const ms = Date.now() - new Date(isoStr).getTime();
+          const m = Math.round(ms / 60000);
+          if (m < 1) return 'now';
+          if (m < 60) return `${m}m ago`;
+          const h = Math.round(m / 60);
+          if (h < 24) return `${h}h ago`;
+          return `${Math.round(h / 24)}d ago`;
+        } catch {
+          return isoStr;
         }
-      } catch (err) {
-        console.error('Audit poll error:', err);
+      },
+
+      escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
       }
-    }
-    els.btnRefreshAudit.addEventListener('click', fetchAudit);
+    };
 
-    // Toggle Polling
-    function togglePolling() {
-      App.polling = !App.polling;
-      if (App.polling) {
-        els.btnTogglePolling.textContent = 'Pause Polling';
-        els.liveDot.style.display = 'inline-block';
-        startPolling();
-      } else {
-        els.btnTogglePolling.textContent = 'Resume Polling';
-        els.liveDot.style.display = 'none';
-        stopPolling();
-      }
-    }
-    els.btnTogglePolling.addEventListener('click', togglePolling);
-
-    function startPolling() {
-      stopPolling();
-      App.pollTimer = setInterval(() => {
-        fetchHealth();
-        if (App.adminKey) fetchAudit();
-      }, App.pollInterval);
-    }
-    function stopPolling() {
-      if (App.pollTimer) {
-        clearInterval(App.pollTimer);
-        App.pollTimer = null;
-      }
-    }
-
-    // Filter Buttons
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        App.filter = btn.dataset.filter;
-        renderAudits();
-      });
-    });
-
-    els.auditSearchInput.addEventListener('input', (e) => {
-      App.search = e.target.value.toLowerCase().trim();
-      renderAudits();
-    });
-
-    // Outcome Badge Helper
-    function getOutcomeBadge(outcome) {
-      const o = (outcome || '').toLowerCase();
-      let cls = 'badge-muted';
-      if (o === 'executed') cls = 'badge-success';
-      else if (o === 'review') cls = 'badge-purple';
-      else if (o === 'blocked' || o === 'failed') cls = 'badge-danger';
-      else if (o === 'pending') cls = 'badge-warning';
-      else if (o === 'skipped') cls = 'badge-muted';
-      return `<span class="badge ${cls}">${escapeHtml(outcome || 'unknown')}</span>`;
-    }
-
-    // Render Jev Probabilities inside a Step
-    function renderJevStep(data) {
-      if (!data || !data.answers) {
-        return `<pre class="code-block">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
-      }
-      const answers = data.answers || {};
-      let html = '<div class="jev-grid">';
-
-      // Action Decision with probabilities
-      if (answers.action) {
-        const action = answers.action;
-        const probs = action.probabilities || {};
-        html += `
-          <div class="jev-card">
-            <div class="jev-card-header">
-              <span class="jev-card-title">Action Decision</span>
-              <span class="badge badge-primary">Choice: ${escapeHtml(action.choice || 'none')}</span>
-            </div>
-            <div class="prob-bar-container">
-        `;
-        for (const [opt, p] of Object.entries(probs)) {
-          const pct = Math.round((Number(p) || 0) * 100);
-          const isChosen = opt === action.choice;
-          html += `
-            <div class="prob-bar-row">
-              <div class="prob-bar-labels">
-                <span style="font-weight:${isChosen ? '600' : '400'}; color:${isChosen ? 'var(--text)' : 'var(--text-muted)'}">${escapeHtml(opt)}</span>
-                <span style="font-family:var(--font-mono); font-size:11px;">${pct}%</span>
-              </div>
-              <div class="prob-bar-track">
-                <div class="prob-bar-fill ${isChosen ? 'chosen' : ''}" style="width: ${pct}%;"></div>
-              </div>
-            </div>
-          `;
-        }
-        html += `</div></div>`;
-      }
-
-      // Urgency Score & probabilities
-      if (answers.urgency) {
-        const urg = answers.urgency;
-        const probs = urg.probabilities || {};
-        html += `
-          <div class="jev-card">
-            <div class="jev-card-header">
-              <span class="jev-card-title">Urgency</span>
-              <span class="badge badge-warning">Score: ${escapeHtml(urg.choice || urg.score || '—')}</span>
-            </div>
-            <div class="prob-bar-container">
-        `;
-        for (const [opt, p] of Object.entries(probs)) {
-          const pct = Math.round((Number(p) || 0) * 100);
-          const isChosen = opt === urg.choice;
-          html += `
-            <div class="prob-bar-row">
-              <div class="prob-bar-labels">
-                <span style="font-weight:${isChosen ? '600' : '400'}; color:${isChosen ? 'var(--text)' : 'var(--text-muted)'}">${escapeHtml(opt)}</span>
-                <span style="font-family:var(--font-mono); font-size:11px;">${pct}%</span>
-              </div>
-              <div class="prob-bar-track">
-                <div class="prob-bar-fill ${isChosen ? 'chosen' : ''}" style="width: ${pct}%;"></div>
-              </div>
-            </div>
-          `;
-        }
-        html += `</div></div>`;
-      }
-
-      // Act Now Safety (Noul)
-      if (answers.act_now) {
-        const act = answers.act_now;
-        const noul = Number(act.noul ?? 0);
-        const pct = Math.round(noul * 100);
-        html += `
-          <div class="jev-card">
-            <div class="jev-card-header">
-              <span class="jev-card-title">Safety (Act Now)</span>
-              <span class="badge ${pct >= 90 ? 'badge-success' : 'badge-danger'}">Noul: ${(noul).toFixed(3)}</span>
-            </div>
-            <div class="prob-bar-container">
-              <div class="prob-bar-row">
-                <div class="prob-bar-labels">
-                  <span>Confidence Threshold (&ge;0.90)</span>
-                  <span style="font-family:var(--font-mono); font-size:11px;">${pct}%</span>
-                </div>
-                <div class="prob-bar-track">
-                  <div class="prob-bar-fill ${pct >= 90 ? 'chosen' : ''}" style="width: ${pct}%;"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-
-      html += '</div>';
-
-      // Metadata (Fallback, Cost, Errors)
-      if (data.fallback || data.cost || data.error) {
-        html += `
-          <div style="margin-top:8px; font-size:11px; color:var(--text-muted); display:flex; gap:12px;">
-            ${data.fallback ? '<span class="badge badge-warning">Fallback Decider</span>' : ''}
-            ${data.cost ? `<span>Tokens: ${escapeHtml(JSON.stringify(data.cost))}</span>` : ''}
-            ${data.error ? `<span class="badge badge-danger">Error: ${escapeHtml(data.error)}</span>` : ''}
-          </div>
-        `;
-      }
-      return html;
-    }
-
-    // Render Steps Timeline for an Audit Record
-    function renderSteps(steps) {
-      if (!Array.isArray(steps) || steps.length === 0) {
-        return '<div style="color:var(--text-dim); font-size:12px;">No steps recorded yet.</div>';
-      }
-      let html = '<div class="steps-timeline">';
-      for (const step of steps) {
-        const kind = step.kind || 'unknown';
-        const at = step.at || '';
-        let stepContent = '';
-
-        if (kind === 'jev') {
-          stepContent = renderJevStep(step.data);
-        } else if (kind === 'gate' || kind === 'review_gate') {
-          const g = step.data || {};
-          stepContent = `
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px;">
-              <span>Verdict:</span>
-              <span class="badge ${g.verdict === 'allow' ? 'badge-success' : g.verdict === 'suggest' ? 'badge-warning' : 'badge-danger'}">${escapeHtml(g.verdict || 'none')}</span>
-              ${g.reason ? `<span style="color:var(--text-muted);">Reason: <code>${escapeHtml(g.reason)}</code></span>` : ''}
-              ${g.key ? `<span style="color:var(--text-dim); font-family:var(--font-mono); font-size:11px;">Key: ${escapeHtml(g.key)}</span>` : ''}
-            </div>
-          `;
-        } else if (kind === 'tool') {
-          const t = step.data || {};
-          stepContent = `
-            <div style="display:flex; flex-direction:column; gap:6px; font-size:12px;">
-              <div>Tool: <strong>${escapeHtml(t.tool || 'none')}</strong> — Result: ${t.result?.ok ? '<span class="badge badge-success">Success</span>' : '<span class="badge badge-danger">Failed</span>'}</div>
-              <pre class="code-block">${escapeHtml(JSON.stringify(t, null, 2))}</pre>
-            </div>
-          `;
-        } else {
-          stepContent = `<pre class="code-block">${escapeHtml(JSON.stringify(step.data || {}, null, 2))}</pre>`;
-        }
-
-        html += `
-          <div class="step-item">
-            <div class="step-header">
-              <div class="step-title">
-                <span class="badge badge-primary">${escapeHtml(kind)}</span>
-              </div>
-              <span class="step-time">${escapeHtml(formatDate(at))}</span>
-            </div>
-            ${stepContent}
-          </div>
-        `;
-      }
-      html += '</div>';
-      return html;
-    }
-
-    // Toggle Expand Event
-    function toggleEvent(id) {
-      if (App.expandedEvents.has(id)) {
-        App.expandedEvents.delete(id);
-      } else {
-        App.expandedEvents.add(id);
-      }
-      renderAudits();
-    }
-
-    // Render Audit Feed
-    function renderAudits() {
-      if (!App.adminKey) return;
-
-      let list = App.audits.filter(a => {
-        if (App.filter !== 'all' && (a.outcome || '').toLowerCase() !== App.filter) return false;
-        if (App.search) {
-          const raw = JSON.stringify(a).toLowerCase();
-          if (!raw.includes(App.search)) return false;
-        }
-        return true;
-      });
-
-      els.feedCountBadge.textContent = `${list.length} events`;
-
-      if (list.length === 0) {
-        els.auditList.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon">🔍</div>
-            <div>No audit entries matching current filters.</div>
-          </div>
-        `;
-        return;
-      }
-
-      let html = '';
-      for (const item of list) {
-        const id = item._id || '';
-        const isExpanded = App.expandedEvents.has(id);
-        const eventData = item.event || {};
-        const mediaId = eventData.mediaId || eventData.data?._id || '—';
-        const eventType = eventData.type || eventData.collection || 'event';
-        const stepsCount = Array.isArray(item.steps) ? item.steps.length : 0;
-
-        html += `
-          <div class="audit-entry">
-            <div class="audit-summary" onclick="toggleEvent('${escapeHtml(id)}')">
-              <div class="audit-summary-left">
-                <span style="font-size:12px; transform:${isExpanded ? 'rotate(90deg)' : 'none'}; display:inline-block; transition:transform 0.15s ease;">▶</span>
-                ${getOutcomeBadge(item.outcome)}
-                <span class="badge badge-muted">${escapeHtml(eventType)}</span>
-                <span style="font-family:var(--font-mono); font-size:12px;">Media: <strong>${escapeHtml(mediaId)}</strong></span>
-                ${item.reason ? `<span style="font-size:12px; color:var(--text-dim);">(${escapeHtml(item.reason)})</span>` : ''}
-              </div>
-              <div class="audit-summary-right">
-                <span class="badge badge-muted">${stepsCount} steps</span>
-                <span class="audit-time">${escapeHtml(formatDate(item.startedAt))}</span>
-              </div>
-            </div>
-            ${isExpanded ? `
-              <div class="audit-details">
-                <div>
-                  <h4 style="font-size:13px; margin-bottom:8px;">Execution Steps & Probabilities</h4>
-                  ${renderSteps(item.steps)}
-                </div>
-                <details style="margin-top:8px;">
-                  <summary style="font-size:12px; color:var(--text-muted); cursor:pointer;">View Raw Audit Event JSON</summary>
-                  <pre class="code-block" style="margin-top:6px;">${escapeHtml(JSON.stringify(item, null, 2))}</pre>
-                </details>
-              </div>
-            ` : ''}
-          </div>
-        `;
-      }
-
-      els.auditList.innerHTML = html;
-    }
-
-    // Startup
-    initTheme();
-    updateAuthUI();
-    fetchHealth();
-    if (App.adminKey) fetchAudit();
-    startPolling();
+    window.addEventListener('DOMContentLoaded', () => App.init());
   </script>
 </body>
 </html>

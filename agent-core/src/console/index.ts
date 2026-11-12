@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 let cachedHtml: string | null = null;
 
 export function getConsoleHtml(): string {
-  if (cachedHtml) {
+  if (cachedHtml && process.env.NODE_ENV === "production") {
     return cachedHtml;
   }
 

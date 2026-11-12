@@ -63,7 +63,7 @@ describe("Console UI & API Security", () => {
     const html = getConsoleHtml();
     expect(typeof html).toBe("string");
     expect(html).toContain("<!DOCTYPE html>");
-    expect(html).toContain("MediCluster Agent Command Center");
+    expect(html).toContain("Agent Auditor");
     expect(html).toContain("sessionStorage");
     expect(html).toContain("/audit");
     expect(html).toContain("/control/stop");
@@ -78,9 +78,8 @@ describe("Console UI & API Security", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const body = await res.text();
-    expect(body).toContain("MediCluster Agent Command Center");
+    expect(body).toContain("Agent Auditor");
     expect(body).toContain("sessionStorage");
-    expect(body).toContain("Live Audit Feed");
   });
 
   it("GET /console/ and /console/index.html also return 200 html", async () => {
