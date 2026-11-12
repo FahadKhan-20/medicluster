@@ -3,46 +3,67 @@
 ## Overview
 Implemented an autonomous Docker self-healing subsystem for `agent-core` that monitors service health, uses Jev to decide recovery actions (`restart | wait | escalate`), enforces safety via policy gates and kill switches, and adheres strictly to a hard limit of at most 3 restarts per service per 10-minute window.
 
-## Files Created and Modified
-- **`agent-core/src/selfheal/docker.ts`** (NEW):
-  - `DockerClient` interface (`inspect`, `restart`).
-  - `DockerHttpController`: Pure Node.js `node:http` client communicating with Docker Engine API over `/var/run/docker.sock` without any new npm dependencies. Injectable `requestFn` and `socketPath` for testing.
-  - `FakeDockerClient`: Test double tracking inspect and restart calls.
-- **`agent-core/src/selfheal/tracker.ts`** (NEW):
-  - `RestartTracker`: Sliding window tracker enforcing the hard rule of max 3 restarts per service per 10 minutes (600,000 ms), with injectable clock.
-- **`agent-core/src/selfheal/loop.ts`** (NEW):
-  - `SelfhealLoop`: Control loop handling `service.down` events from `HealthPoller` as well as direct container exit/unhealthy status events.
-  - State compilation: Inspects container status, recent restarts, and passes fact-only state to Jev.
-  - Jev decider: Decides `action` (`restart`, `wait`, `escalate`), `urgency`, and `act_now`.
-  - Hard rule enforcement: When 3 restarts occurred within the last 10 minutes, automatically overrides `restart` to `escalate`.
-  - Safety gate & kill switch: Checks policy group `selfheal` (or `alerts` for escalation), verify threshold, rate limits, and kill switch (`state.isStopped()`).
-  - Write path & audit: Uses in-flight locks and idempotency keys (`${event.id}:${action}`), logs all steps via `Audit`, records rate limit in `Gate`, and marks keys done in `AgentState`.
-  - Escalation: Calls `alerts.create` tool (`/api/alerts/agent`) with complete payload. If backend is down, returns `pending` and enqueues event for retry.
-  - Container mapping: Resolves service names to container names from `SELFHEAL_CONTAINERS` env JSON, defaulting to `{"backend":"medicluster-backend-1","ml":"medicluster-ml-engine-1"}`.
-- **`agent-core/src/selfheal/index.ts`** (NEW):
-  - Module exports and `registerSelfheal` function to wire `HealthPoller` events to `SelfhealLoop`.
-- **`agent-core/policy.yaml`** (MODIFIED):
-  - Added policy group `selfheal: auto`.
-- **`agent-core/src/main.ts`** (MODIFIED):
-  - Added registration line for `registerSelfheal(health, { ... })`.
-- **`medicluster/docker-compose.yml`** (MODIFIED):
-  - Mounted `/var/run/docker.sock:/var/run/docker.sock` in the `agent-core` service.
-- **`agent-core/tests/selfheal.test.ts`** (NEW):
-  - 21 unit and integration tests covering `DockerHttpController`, `RestartTracker`, container mapping, Gate checks, kill switch, hard limit escalation, idempotency, and `registerSelfheal`.
+## Fix Round (Pre-Merge Safety & Architecture Review)
+Addressed all feedback items from `fix-selfheal.md`:
+1. **Isolated Docker Socket Proxy**:
+   - Removed `/var/run/docker.sock` mount from the base `medicluster/docker-compose.yml`.
+   - Created opt-in compose override `medicluster/docker-compose.selfheal.yml` running `tecnativa/docker-socket-proxy:0.1.1` with a read-only socket mount (`/var/run/docker.sock:ro`) and strictly restricted permissions (`CONTAINERS=1` and `POST=1` only).
+   - Added TCP support in `DockerHttpController` connecting via `DOCKER_HOST=tcp://docker-proxy:2375`.
+   - Documented the opt-in compose override in `agent-core/README.md`.
+2. **Container Name Validation & Anti-Self-Targeting**:
+   - Container names are strictly validated against `^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`.
+   - Any container name containing `"agent-core"` is refused.
+   - Used `Object.hasOwn(this.containers, service)` for safe prototype-pollution-free container lookups.
+3. **Restart Attempt Accounting & Per-Service Concurrency Lock**:
+   - Restart attempts are counted toward the 3 restarts / 10-minute limit before invoking Docker, ensuring even failed restart attempts count against the threshold.
+   - Added a per-service lock (`activeRestarts`) so concurrent downtime events for the same service cannot simultaneously trigger restarts.
+4. **Queue Ownership & Retry Coordination**:
+   - `AgentLoop.process` returns `keep: true` for `service.down` events so `AgentLoop.drainQueue()` does not acknowledge or drop self-heal events.
+   - Wired `selfheal.retryPending()` into `main.ts`'s 60-second retry interval and on `service.up` notifications.
+   - Added test proving queued `service.down` events remain in the queue during `AgentLoop` passes and are properly retried and acknowledged by `SelfhealLoop`.
+5. **Clean Health Listener & PII/Audit Hygiene**:
+   - Added `addListener` to `HealthPoller` so `registerSelfheal` listens for health events without monkeypatching `health.start`.
+   - Added `.catch` handler to `handleDown(e)` promise in `registerSelfheal`.
+   - Completely dropped `ContainerInspect.raw` to prevent storing raw Docker JSON in events or audit logs.
 
-## Decisions & Design Notes
-1. **Zero New Dependencies**: Used Node's built-in `http.request` with `socketPath` for Docker Engine API interactions.
-2. **Defense-in-Depth Hard Rule**: The 3 restarts / 10 min rule is passed to Jev in the state facts, checked before Gate evaluation, and rechecked immediately before calling `docker.restart` within the locked write path.
-3. **Escalation via `alerts.create`**: Uses existing `alerts.create` tool and adheres to required schemas (`patient_id: "system"`, `source_id: service`, `severity: "CRITICAL"`).
-4. **Resilience under Service Outages**: If backend itself is failing and escalation alert delivery fails, the event is marked `pending` and enqueued in `AgentState` so `retryPending()` can deliver it once backend recovers.
+## Files Created and Modified
+- **`agent-core/src/selfheal/docker.ts`**:
+  - `DockerClient` interface (`inspect`, `restart`).
+  - `DockerHttpController`: Supports both Unix domain sockets and TCP hosts (`DOCKER_HOST`). Enforces container name validation (`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$` and refuses `"agent-core"`).
+  - Dropped `raw` inspection payload.
+  - `FakeDockerClient`: Test double with inspect, restart, and failure simulation.
+- **`agent-core/src/selfheal/tracker.ts`**:
+  - `RestartTracker`: Sliding window tracker enforcing max 3 restart attempts per service per 10 minutes (600,000 ms), with injectable clock.
+- **`agent-core/src/selfheal/loop.ts`**:
+  - `SelfhealLoop`: Control loop handling `service.down` events from `HealthPoller` as well as direct container exit/unhealthy status events.
+  - Uses `Object.hasOwn` for service lookups and validates container names.
+  - Manages `activeRestarts` per-service in-process locks to prevent concurrent restarts.
+  - Counts restart attempts toward the 3/10m limit.
+  - Hard rule enforcement: Automatically redirects to `escalate` via `alerts.create` when limits are exceeded.
+- **`agent-core/src/selfheal/index.ts`**:
+  - Module exports and `registerSelfheal` function using `health.addListener` and explicit promise `.catch` handlers.
+- **`agent-core/src/events/health.ts`**:
+  - Added `addListener(listener)` to `HealthPoller`.
+- **`agent-core/src/agent/loop.ts`**:
+  - Changed `service.down` / `service.up` processing to return `keep: true` so `AgentLoop.drainQueue` does not prematurely acknowledge selfheal queue items.
+- **`agent-core/src/main.ts`**:
+  - Wires both `loop.retryPending()` and `selfheal.retryPending()` into `retry()`.
+- **`agent-core/README.md`**:
+  - Documented opt-in self-heal mode with `docker-compose.selfheal.yml`.
+- **`medicluster/docker-compose.yml`**:
+  - Base compose file without raw socket mount.
+- **`medicluster/docker-compose.selfheal.yml`**:
+  - Opt-in compose override with `docker-proxy` (`tecnativa/docker-socket-proxy:0.1.1`) and `DOCKER_HOST=tcp://docker-proxy:2375`.
+- **`agent-core/tests/selfheal.test.ts`**:
+  - 32 unit and integration tests covering socket & TCP controller, container validation, restart attempt tracking, per-service locks, queue preservation, and health listeners.
 
 ## Test Output Summary
 - `npx vitest run`:
   - Test files: 11 passed (100%)
-  - Tests: 164 passed (21 new tests in `tests/selfheal.test.ts`, 143 existing tests in 10 test files)
-  - Time: ~0.73s
+  - Tests: 175 passed (32 tests in `tests/selfheal.test.ts`, 143 existing tests in 10 test files)
+  - Time: ~0.71s
 - `npx tsc --noEmit -p .`:
   - 0 errors, clean TypeScript build.
 
 ## Anything Left Undone
-None. All requirements specified in `selfheal.md` are implemented, fully tested, and committed.
+None. All 5 items from `fix-selfheal.md` are completely resolved, tested, and verified.

@@ -121,7 +121,7 @@ export class AgentLoop {
   }
 
   private async process(event: Event): Promise<{ outcome: Outcome; keep: boolean }> {
-    if (event.type === "service.up" || event.type === "service.down") return { outcome: "skipped", keep: false };
+    if (event.type === "service.up" || event.type === "service.down") return { outcome: "skipped", keep: true };
     const doc = stripDoc(event.doc);
     const c: Ctx = { event: { ...event, doc }, doc, auditId: await this.d.audit.start({ ...event, doc }), keep: false };
     let r: Result;

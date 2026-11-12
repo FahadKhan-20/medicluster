@@ -10,8 +10,10 @@ import {
   SelfhealLoop,
   registerSelfheal,
   resolveContainers,
+  isValidContainerName,
   DEFAULT_CONTAINERS,
 } from "../src/selfheal/index.js";
+import { AgentLoop } from "../src/agent/loop.js";
 import { FakeJev, type Answer, type Question, type Decider } from "../src/judge/jev.js";
 import { FakeLlm } from "../src/llm/provider.js";
 import { Audit } from "../src/audit/audit.js";
@@ -100,6 +102,30 @@ function setupTest(opts: {
   return { loop, docker, jev, llm, audit, state, gate, backend, calls, db, store };
 }
 
+describe("Container Name Validation", () => {
+  it("accepts valid container names matching ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", () => {
+    expect(isValidContainerName("medicluster-backend-1")).toBe(true);
+    expect(isValidContainerName("ml-engine_1")).toBe(true);
+    expect(isValidContainerName("my.container.name")).toBe(true);
+    expect(isValidContainerName("app123")).toBe(true);
+  });
+
+  it("refuses any container whose name contains agent-core", () => {
+    expect(isValidContainerName("agent-core")).toBe(false);
+    expect(isValidContainerName("medicluster-agent-core-1")).toBe(false);
+    expect(isValidContainerName("agent-core-service")).toBe(false);
+    expect(isValidContainerName("my-agent-core")).toBe(false);
+  });
+
+  it("refuses invalid container characters or formatting", () => {
+    expect(isValidContainerName("")).toBe(false);
+    expect(isValidContainerName("-starts-with-dash")).toBe(false);
+    expect(isValidContainerName("has spaces")).toBe(false);
+    expect(isValidContainerName("bad$char")).toBe(false);
+    expect(isValidContainerName("semi;colon")).toBe(false);
+  });
+});
+
 describe("DockerHttpController", () => {
   it("inspects container and parses response on 200", async () => {
     const fakeRequest = async () => ({
@@ -123,6 +149,12 @@ describe("DockerHttpController", () => {
     expect(result?.health).toBe("unhealthy");
   });
 
+  it("refuses inspect on invalid container names or agent-core", async () => {
+    const controller = new DockerHttpController();
+    await expect(controller.inspect("agent-core")).rejects.toThrow("invalid container name");
+    await expect(controller.inspect("-bad")).rejects.toThrow("invalid container name");
+  });
+
   it("returns null when container is 404", async () => {
     const fakeRequest = async () => ({ status: 404, data: '{"message":"no such container"}' });
     const controller = new DockerHttpController({ requestFn: fakeRequest });
@@ -133,7 +165,7 @@ describe("DockerHttpController", () => {
   it("throws on inspect unexpected error status", async () => {
     const fakeRequest = async () => ({ status: 500, data: "daemon failure" });
     const controller = new DockerHttpController({ requestFn: fakeRequest });
-    await expect(controller.inspect("bad")).rejects.toThrow("Docker inspect failed with status 500");
+    await expect(controller.inspect("bad-server")).rejects.toThrow("Docker inspect failed with status 500");
   });
 
   it("restarts container on 204", async () => {
@@ -142,6 +174,14 @@ describe("DockerHttpController", () => {
     const res = await controller.restart("test-container");
     expect(res.ok).toBe(true);
     expect(res.status).toBe(204);
+  });
+
+  it("refuses restart on invalid container names or agent-core", async () => {
+    const controller = new DockerHttpController();
+    const res = await controller.restart("medicluster-agent-core-1");
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe(400);
+    expect(res.error).toContain("invalid container name");
   });
 
   it("returns error on restart 404", async () => {
@@ -161,6 +201,38 @@ describe("DockerHttpController", () => {
     expect(res.ok).toBe(false);
     expect(res.status).toBe(0);
     expect(res.error).toContain("connect ENOENT");
+  });
+
+  it("supports TCP via DOCKER_HOST tcp://host:port", async () => {
+    const server = http.createServer((req, res) => {
+      if (req.url === "/containers/tcp-srv/json" && req.method === "GET") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ Id: "tcp-1", Name: "/tcp-srv", State: { Status: "running", Running: true } }));
+        return;
+      }
+      if (req.url?.startsWith("/containers/tcp-srv/restart") && req.method === "POST") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as any).port;
+
+    try {
+      const controller = new DockerHttpController({ dockerHost: `tcp://127.0.0.1:${port}` });
+      const inspect = await controller.inspect("tcp-srv");
+      expect(inspect?.id).toBe("tcp-1");
+
+      const restart = await controller.restart("tcp-srv");
+      expect(restart.ok).toBe(true);
+      expect(restart.status).toBe(204);
+    } finally {
+      server.close();
+    }
   });
 
   it("talks to a real unix domain socket mock server", async () => {
@@ -231,14 +303,21 @@ describe("RestartTracker", () => {
 });
 
 describe("Container mapping", () => {
-  it("defaults to standard containers and parses SELFHEAL_CONTAINERS env", () => {
+  it("defaults to standard containers and parses SELFHEAL_CONTAINERS env safely", () => {
     expect(DEFAULT_CONTAINERS.backend).toBe("medicluster-backend-1");
     expect(DEFAULT_CONTAINERS.ml).toBe("medicluster-ml-engine-1");
 
-    const custom = resolveContainers(undefined, JSON.stringify({ backend: "custom-backend-1", worker: "worker-1" }));
+    const custom = resolveContainers(undefined, JSON.stringify({
+      backend: "custom-backend-1",
+      worker: "worker-1",
+      evil: "agent-core", // must be excluded
+      bad: "$invalid_name", // must be excluded
+    }));
     expect(custom.backend).toBe("custom-backend-1");
     expect(custom.ml).toBe("medicluster-ml-engine-1");
     expect(custom.worker).toBe("worker-1");
+    expect(custom.evil).toBeUndefined();
+    expect(custom.bad).toBeUndefined();
   });
 });
 
@@ -265,6 +344,120 @@ describe("SelfhealLoop", () => {
     expect(auditLogs[0].outcome).toBe("executed");
     expect(auditLogs[0].steps.some((s: any) => s.kind === "docker")).toBe(true);
     expect(auditLogs[0].steps.some((s: any) => s.kind === "gate")).toBe(true);
+  });
+
+  it("refuses service mapped to agent-core or invalid container name", async () => {
+    const { loop, docker } = setupTest({
+      containers: { backend: "agent-core" },
+    });
+
+    const event: Event = {
+      id: "backend:down:evil",
+      type: "service.down",
+      service: "backend",
+      at: "2026-11-13T00:00:00.000Z",
+    };
+
+    const outcome = await loop.handle(event);
+    expect(outcome).toBe("failed");
+    expect(docker.restarts.length).toBe(0);
+  });
+
+  it("refuses unmapped service using Object.hasOwn", async () => {
+    const { loop } = setupTest();
+
+    const event: Event = {
+      id: "toString:down",
+      type: "service.down",
+      service: "toString", // prototype property
+      at: "2026-11-13T00:00:00.000Z",
+    };
+
+    const outcome = await loop.handle(event);
+    expect(outcome).toBe("failed");
+  });
+
+  it("counts restart ATTEMPTS (even failed ones) toward 3/10-min limit", async () => {
+    let now = 100_000;
+    const fakeDocker = new FakeDockerClient({
+      "medicluster-backend-1": { status: "exited", running: false },
+    });
+    fakeDocker.failRestart("medicluster-backend-1");
+
+    const { loop, calls } = setupTest({
+      docker: fakeDocker,
+      now: () => now,
+      jev: new FakeJev(jevSelfhealRules("restart")),
+    });
+
+    // 3 failed restart attempts
+    for (let i = 1; i <= 3; i++) {
+      const ev: Event = {
+        id: `backend:down:fail:${i}`,
+        type: "service.down",
+        service: "backend",
+        at: new Date(now).toISOString(),
+      };
+      const res = await loop.handle(ev);
+      expect(res).toBe("failed"); // Docker restart failed
+      now += 10_000;
+    }
+
+    expect(fakeDocker.restarts.length).toBe(3);
+
+    // 4th downtime occurs within 10 minutes: attempts were counted, so limit is reached!
+    // Hard rule forces escalation instead of another restart attempt
+    const fourthEvent: Event = {
+      id: "backend:down:fail:4",
+      type: "service.down",
+      service: "backend",
+      at: new Date(now).toISOString(),
+    };
+
+    const fourthOutcome = await loop.handle(fourthEvent);
+    expect(fourthOutcome).toBe("executed"); // Escalation executed
+    expect(fakeDocker.restarts.length).toBe(3); // No 4th restart attempted!
+    expect(calls.length).toBe(1);
+    expect(calls[0].path).toBe("/api/alerts/agent");
+  });
+
+  it("per-service in-process lock prevents concurrent restarts for the same service", async () => {
+    const { loop, docker } = setupTest();
+
+    // Trigger two events for the same service concurrently
+    const ev1: Event = { id: "backend:down:c1", type: "service.down", service: "backend", at: "2026-11-13T00:00:00.000Z" };
+    const ev2: Event = { id: "backend:down:c2", type: "service.down", service: "backend", at: "2026-11-13T00:00:00.000Z" };
+
+    let releaseDocker!: () => void;
+    const holdDocker = new Promise<void>((r) => {
+      releaseDocker = r;
+    });
+
+    const originalRestart = docker.restart.bind(docker);
+    docker.restart = async (c, t) => {
+      originalRestart(c, t); // record restart call
+      await holdDocker;
+      return { ok: true, status: 204 };
+    };
+
+    const p1 = loop.handle(ev1);
+
+    // Wait until p1 enters docker.restart and holds activeRestarts
+    while (docker.restarts.length === 0) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+
+    // Now p2 attempts to handle downtime for the same service while p1 is restarting it
+    const p2 = loop.handle(ev2);
+    const res2 = await p2;
+
+    expect(res2).toBe("blocked"); // Second one blocked by activeRestarts lock
+
+    releaseDocker();
+    const res1 = await p1;
+
+    expect(res1).toBe("executed");
+    expect(docker.restarts.length).toBe(1);
   });
 
   it("skips when Jev decides wait", async () => {
@@ -358,7 +551,7 @@ describe("SelfhealLoop", () => {
   });
 
   it("blocks and enqueues event when kill switch is active (state.isStopped)", async () => {
-    const { loop, docker, state, db } = setupTest();
+    const { loop, docker, state } = setupTest();
     await state.setStopped(true);
 
     const event: Event = {
@@ -485,7 +678,55 @@ describe("SelfhealLoop", () => {
     expect(fakeDocker.restarts.length).toBe(1);
   });
 
-  it("registerSelfheal wires HealthPoller service.down events directly to selfheal", async () => {
+  it("QUEUE: AgentLoop.drainQueue does not ack service.down and selfheal.retryPending retries it", async () => {
+    const { loop: selfheal, docker, state, audit, gate, backend, jev, llm } = setupTest();
+    const imagingLoop = new AgentLoop({
+      jev,
+      llm,
+      audit,
+      state,
+      gate,
+      backend,
+      health: { isUp: () => true },
+    });
+
+    const event: Event = {
+      id: "backend:down:queued",
+      type: "service.down",
+      service: "backend",
+      at: "2026-11-13T00:00:00.000Z",
+    };
+
+    // Enqueue service.down into AgentState
+    await state.enqueue(event);
+
+    // Verify it is in the queue
+    let queued = await state.drain();
+    expect(queued.length).toBe(1);
+    expect(queued[0].id).toBe(event.id);
+
+    // Call AgentLoop.retryPending()
+    await imagingLoop.retryPending();
+
+    // Verify AgentLoop did NOT ack it — it is still queued!
+    queued = await state.drain();
+    expect(queued.length).toBe(1);
+    expect(queued[0].id).toBe(event.id);
+    expect(docker.restarts.length).toBe(0);
+
+    // Call SelfhealLoop.retryPending()
+    await selfheal.retryPending();
+
+    // Verify SelfhealLoop processed it (restarted container)
+    expect(docker.restarts.length).toBe(1);
+    expect(docker.restarts[0].container).toBe("medicluster-backend-1");
+
+    // Verify event is now acked and no longer pending in drain
+    queued = await state.drain();
+    expect(queued.length).toBe(0);
+  });
+
+  it("registerSelfheal registers a health listener instead of monkeypatching start", async () => {
     const fakeDocker = new FakeDockerClient({
       "medicluster-backend-1": { status: "exited", running: false },
     });
@@ -507,6 +748,7 @@ describe("SelfhealLoop", () => {
       fetch: (async () => ({ ok: false, status: 500 })) as any,
     });
 
+    const originalStart = poller.start;
     registerSelfheal(poller, {
       docker: fakeDocker,
       jev,
@@ -515,6 +757,9 @@ describe("SelfhealLoop", () => {
       gate,
       backend,
     });
+
+    // Verify poller.start was NOT monkeypatched
+    expect(poller.start).toBe(originalStart);
 
     const eventsHandled: Event[] = [];
     await poller.start((e) => {
@@ -529,7 +774,7 @@ describe("SelfhealLoop", () => {
     // Wait microtask tick for async handle
     await new Promise((r) => setTimeout(r, 20));
 
-    // Verify selfheal restarted the container
+    // Verify selfheal restarted the container via listener
     expect(fakeDocker.restarts.length).toBe(1);
     expect(fakeDocker.restarts[0].container).toBe("medicluster-backend-1");
   });

@@ -6,7 +6,7 @@ import { choice, noul, score, type Decider, type DecideResult } from "../judge/j
 import { ProviderError, type LlmProvider } from "../llm/provider.js";
 import type { BackendClient } from "../tools/backend.js";
 import { toolForAction, validateArgs, type Tool } from "../tools/registry.js";
-import type { DockerClient, ContainerInspect } from "./docker.js";
+import { type DockerClient, type ContainerInspect, isValidContainerName } from "./docker.js";
 import { RestartTracker } from "./tracker.js";
 
 export type Outcome = AuditOutcome;
@@ -20,18 +20,27 @@ export function resolveContainers(
   custom?: Record<string, string>,
   envVal = process.env.SELFHEAL_CONTAINERS,
 ): Record<string, string> {
-  let envContainers: Record<string, string> = {};
+  const merged: Record<string, string> = { ...DEFAULT_CONTAINERS };
   if (envVal) {
     try {
       const parsed = JSON.parse(envVal);
       if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        envContainers = parsed;
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === "string" && isValidContainerName(v)) {
+            merged[k] = v;
+          }
+        }
       }
     } catch {
       // Ignore malformed JSON in env
     }
   }
-  return { ...DEFAULT_CONTAINERS, ...envContainers, ...(custom ?? {}) };
+  if (custom) {
+    for (const [k, v] of Object.entries(custom)) {
+      merged[k] = v;
+    }
+  }
+  return merged;
 }
 
 export const SELFHEAL_QUESTIONS = {
@@ -72,6 +81,7 @@ export class SelfhealLoop {
   private readonly containers: Record<string, string>;
   private readonly tracker: RestartTracker;
   private readonly inFlight = new Set<string>();
+  private readonly activeRestarts = new Set<string>();
   private retrying?: Promise<number>;
 
   constructor(deps: SelfhealDeps) {
@@ -93,8 +103,9 @@ export class SelfhealLoop {
   }
 
   async checkContainer(service: string): Promise<Outcome> {
+    if (!Object.hasOwn(this.containers, service)) return "failed";
     const container = this.containers[service];
-    if (!container) return "failed";
+    if (!isValidContainerName(container)) return "failed";
     const inspect = await this.d.docker.inspect(container);
     if (!inspect) return "failed";
     if (
@@ -108,7 +119,7 @@ export class SelfhealLoop {
         type: "service.down",
         service,
         at,
-        doc: inspect,
+        doc: { service, status: inspect.status, health: inspect.health },
       };
       return this.handle(event);
     }
@@ -186,9 +197,13 @@ export class SelfhealLoop {
       return { outcome: "skipped", reason: "missing_service" };
     }
 
-    const container = this.containers[service];
-    if (!container) {
+    if (!Object.hasOwn(this.containers, service)) {
       return { outcome: "failed", reason: "unmapped_service" };
+    }
+    const container = this.containers[service];
+    if (!isValidContainerName(container)) {
+      await this.step(c, "validation", { error: "invalid_container_name", container, service });
+      return { outcome: "failed", reason: "invalid_container_name" };
     }
 
     if (await this.d.state.isStopped()) {
@@ -236,6 +251,12 @@ export class SelfhealLoop {
     }
 
     if (action === "restart") {
+      // Per-service in-process lock check
+      if (this.activeRestarts.has(service)) {
+        c.keep = true;
+        return { outcome: "blocked", reason: "duplicate" };
+      }
+
       // Hard rule: max 3 restarts per service per 10 min
       if (restartLimitReached) {
         await this.step(c, "hard_rule", {
@@ -334,23 +355,36 @@ export class SelfhealLoop {
       return { outcome: "blocked", reason: "stopped" };
     }
 
-    // Hard rule double-check inside locked write path
-    if (!this.tracker.canRestart(service)) {
-      await this.step(c, "hard_rule", { rule: "max_restarts_per_10m", service, limit: 3 });
-      return this.handleEscalation(c, service, container, facts, decision, "max_restarts_exceeded");
+    // Per-service in-process lock so two events can't both restart the same service
+    if (this.activeRestarts.has(service)) {
+      c.keep = true;
+      return { outcome: "blocked", reason: "duplicate" };
     }
+    this.activeRestarts.add(service);
 
-    const res = await this.d.docker.restart(container);
-    await this.step(c, "docker", { action: "restart", container, result: res });
+    try {
+      // Hard rule double-check inside locked write path
+      if (!this.tracker.canRestart(service)) {
+        await this.step(c, "hard_rule", { rule: "max_restarts_per_10m", service, limit: 3 });
+        return this.handleEscalation(c, service, container, facts, decision, "max_restarts_exceeded");
+      }
 
-    if (!res.ok) {
-      return { outcome: "failed", reason: res.error || "docker_restart_failed" };
+      // Count restart ATTEMPTS (not only successes) toward the 3/10-min limit
+      this.tracker.recordRestart(service);
+
+      const res = await this.d.docker.restart(container);
+      await this.step(c, "docker", { action: "restart", container, result: res });
+
+      if (!res.ok) {
+        return { outcome: "failed", reason: res.error || "docker_restart_failed" };
+      }
+
+      this.d.gate.record("selfheal");
+      await this.d.state.markDone(key);
+      return { outcome: "executed", reason: "restarted" };
+    } finally {
+      this.activeRestarts.delete(service);
     }
-
-    this.tracker.recordRestart(service);
-    this.d.gate.record("selfheal");
-    await this.d.state.markDone(key);
-    return { outcome: "executed", reason: "restarted" };
   }
 
   private async executeEscalate(

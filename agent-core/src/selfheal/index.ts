@@ -23,18 +23,14 @@ export function registerSelfheal(health: HealthPoller, options: RegisterSelfheal
   const handleDown = options.work
     ? options.work.wrap((e: Event) => loop.handle(e).then(() => undefined))
     : (e: Event) => {
-        void loop.handle(e).catch((err) => console.error("[selfheal] error handling event:", err));
+        return loop.handle(e).then(() => undefined);
       };
 
-  const originalStart = health.start.bind(health);
-  health.start = async (onEvent: (e: Event) => Promise<void> | void): Promise<void> => {
-    return originalStart(async (e: Event) => {
-      if (e.type === "service.down") {
-        void handleDown(e);
-      }
-      return onEvent(e);
-    });
-  };
+  health.addListener((e: Event) => {
+    if (e.type === "service.down") {
+      void handleDown(e).catch((err) => console.error("[selfheal] error handling event:", err));
+    }
+  });
 
   return loop;
 }

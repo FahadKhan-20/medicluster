@@ -36,6 +36,16 @@ With Docker Compose (needs Node 22 for Supabase Realtime), from the repo root:
 AGENT_JWT_SECRET=... AGENT_ADMIN_KEY=... OPENROUTER_API_KEY=... docker compose -f medicluster/docker-compose.yml up agent-core
 ```
 
+### Self-Healing Mode (Opt-in)
+
+To enable autonomous container self-healing, run with the `docker-compose.selfheal.yml` override:
+
+```
+docker compose -f medicluster/docker-compose.yml -f medicluster/docker-compose.selfheal.yml up
+```
+
+This starts a secure `docker-proxy` service using `tecnativa/docker-socket-proxy:0.1.1` with a read-only Docker socket mount (`/var/run/docker.sock:ro`) and restricted permissions (`CONTAINERS=1` and `POST=1` only). `agent-core` connects securely over TCP via `DOCKER_HOST=tcp://docker-proxy:2375`.
+
 ## HTTP API
 
 `GET /health` is public. Everything else needs `x-admin-key`; a missing or wrong key returns 401.

@@ -40,8 +40,12 @@ async function main(): Promise<void> {
   });
   const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health });
   const work = trackInFlight();
+  const selfheal = registerSelfheal(health, { jev, llm, audit, state, gate, backend, work });
   const retry = work.wrap(() =>
-    loop.retryPending().catch((err) => console.error("[agent-core] retryPending failed", err)),
+    Promise.all([
+      loop.retryPending().catch((err) => console.error("[agent-core] loop retryPending failed", err)),
+      selfheal.retryPending().catch((err) => console.error("[agent-core] selfheal retryPending failed", err)),
+    ]),
   );
   const handle = work.wrap((e: Event) => loop.handle(e).then(() => undefined));
 
@@ -55,7 +59,6 @@ async function main(): Promise<void> {
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   log(`listening on ${config.port}`);
 
-  registerSelfheal(health, { jev, llm, audit, state, gate, backend, work });
   policyStore.watch();
   await health.start((e: Event) => {
     if (e.type === "service.up") void retry();
