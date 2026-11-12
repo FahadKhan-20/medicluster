@@ -9,6 +9,7 @@ const ClusterResult = require("../models/ClusterResult");
 const Reminder = require("../models/Reminder");
 const PatientMedia = require("../models/PatientMedia");
 const AlertAck = require("../models/AlertAck");
+const AgentAlert = require("../models/AgentAlert");
 
 const router = express.Router();
 
@@ -16,6 +17,12 @@ const HOUR = 3_600_000;
 const DOSE_GRACE_MS = 30 * 60_000;      // a dose counts as missed 30 min after it was due
 const IMAGING_WINDOW_MS = 7 * 24 * HOUR;
 const FINDING_THRESHOLD = 0.5;
+const AGENT_ALERT_LIMIT = 200;
+const SEVERITIES = ["WARNING", "HIGH", "CRITICAL"];
+const MAX_TITLE = 200;
+const MAX_SUMMARY = 2000;
+const MAX_ID = 200;
+const MAX_PROBABILITIES_JSON = 4000;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -109,15 +116,61 @@ async function imagingAlerts(now) {
   });
 }
 
+async function agentAlerts() {
+  const docs = await AgentAlert.find({}).sort({ createdAt: -1 }).limit(AGENT_ALERT_LIMIT).lean();
+  return docs.map((d) => {
+    const confidence = Math.round(100 * Math.max(0, ...Object.values(d.jev_probabilities?.action ?? {}).map(Number).filter(Number.isFinite)));
+    return {
+      id: `agent:${d._id}`,
+      at: d.createdAt,
+      severity: d.severity,
+      source: "agent",
+      patientId: d.patient_id,
+      title: d.title,
+      body: d.summary,
+      facts: [["Decided by", "Jev"], ["Confidence", `${confidence}%`]],
+      link: `/patient/${encodeURIComponent(d.patient_id)}`,
+    };
+  });
+}
+
 // ── GET /api/alerts ─────────────────────────────────────────────────────────
 router.get("/", async (req, res, next) => {
   try {
     const now = new Date();
-    const groups = await Promise.all([clusteringAlerts(), missedDoseAlerts(now), imagingAlerts(now)]);
+    const groups = await Promise.all([clusteringAlerts(), missedDoseAlerts(now), imagingAlerts(now), agentAlerts()]);
     const alerts = groups.flat().sort((a, b) => new Date(b.at) - new Date(a.at));
     const acks = await AlertAck.find({ userId: req.userId, alertId: { $in: alerts.map((a) => a.id) } }, { alertId: 1 }).lean();
     const read = new Set(acks.map((a) => a.alertId));
     return res.json(alerts.map((a) => ({ ...a, read: read.has(a.id) })));
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── POST /api/alerts/agent ── agent-core only ───────────────────────────────
+const isText = (v, max) => typeof v === "string" && v.trim().length > 0 && v.length <= max;
+
+router.post("/agent", async (req, res, next) => {
+  try {
+    if (!req.agent) return res.status(403).json({ error: "Agent sign-in required" });
+    const { patient_id, source_id, severity, title, summary, jev_probabilities, audit_id } = req.body || {};
+    const probabilities = jev_probabilities;
+    const problem =
+      !isText(patient_id, MAX_ID) ? "patient_id is required" :
+      !isText(source_id, MAX_ID) ? "source_id is required" :
+      !isText(audit_id, MAX_ID) ? "audit_id is required" :
+      !SEVERITIES.includes(severity) ? `severity must be one of ${SEVERITIES.join(", ")}` :
+      !isText(title, MAX_TITLE) ? `title is required (max ${MAX_TITLE} chars)` :
+      !isText(summary, MAX_SUMMARY) ? `summary is required (max ${MAX_SUMMARY} chars)` :
+      !probabilities || typeof probabilities !== "object" || Array.isArray(probabilities) ? "jev_probabilities must be an object" :
+      JSON.stringify(probabilities).length > MAX_PROBABILITIES_JSON ? `jev_probabilities exceeds ${MAX_PROBABILITIES_JSON} characters` : null;
+    if (problem) return res.status(400).json({ error: problem });
+
+    const existing = await AgentAlert.findOne({ source_id, audit_id }).lean();
+    if (existing) return res.status(200).json(existing);
+    const created = await AgentAlert.create({ patient_id, source_id, severity, title, summary, jev_probabilities: probabilities, audit_id });
+    return res.status(201).json(created.toObject ? created.toObject() : created);
   } catch (err) {
     return next(err);
   }
