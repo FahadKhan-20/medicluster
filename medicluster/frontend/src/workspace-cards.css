@@ -202,7 +202,7 @@
 .mc-patient-notify { display: flex; align-items: center; gap: 12px; width: 100%; padding: 16px; border: 1px solid #e3e8dc; border-radius: 19px; background: #fff; text-align: left; color: #17221d; font: inherit; font-size: 12px; }
 .mc-patient-notify > span { flex: 1; }
 .mc-patient-emergency { display: flex; justify-content: space-between; align-items: center; padding: 15px 18px; border-radius: 18px; background: #faeee8; color: #8a2622; font-size: 12px; text-decoration: none; }
-.mc-patient-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); flex-shrink: 0; padding: 8px 14px max(12px,env(safe-area-inset-bottom)); gap: 6px; background: #fff; border: 0; box-shadow: 0 -8px 30px #17221d04; }
+.mc-patient-tabs { display: grid; grid-template-columns: repeat(auto-fit,minmax(0,1fr)); flex-shrink: 0; padding: 8px 14px max(12px,env(safe-area-inset-bottom)); gap: 6px; background: #fff; border: 0; box-shadow: 0 -8px 30px #17221d04; }
 .mc-patient-tabs a { min-height: 58px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; border-radius: 18px; font-size: 10px; color: #62675e; text-decoration: none; }
 .mc-patient-tabs a[aria-current="page"] { color: #17251d; background: #e4ebdc; font-weight: 500; }
 
