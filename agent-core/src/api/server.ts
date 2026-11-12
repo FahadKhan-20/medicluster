@@ -4,6 +4,7 @@ import type { Audit } from "../audit/audit.js";
 import type { AgentState } from "../control/state.js";
 import type { AgentLoop } from "../agent/loop.js";
 import type { McStore } from "../store/mc.js";
+import type { BuilderService } from "../builder/builder.js";
 import { rowToEvent } from "../events/events.js";
 
 export interface ServerDeps {
@@ -13,6 +14,7 @@ export interface ServerDeps {
   health: { isUp(name: string): boolean };
   store: Pick<McStore, "find">;
   adminKey: string;
+  builder?: Pick<BuilderService, "handleTask">;
 }
 
 const MAX_BODY = 16 * 1024;
@@ -53,7 +55,7 @@ async function readJson(req: http.IncomingMessage): Promise<unknown> {
 }
 
 export function createServer(deps: ServerDeps): http.Server {
-  const { audit, state, loop, health, store, adminKey } = deps;
+  const { audit, state, loop, health, store, adminKey, builder } = deps;
 
   async function route(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -74,7 +76,7 @@ export function createServer(deps: ServerDeps): http.Server {
 
     const known =
       (method === "GET" && path === "/audit") ||
-      (method === "POST" && ["/control/stop", "/control/start", "/command"].includes(path));
+      (method === "POST" && ["/control/stop", "/control/start", "/command", "/builder/task"].includes(path));
     if (!known) return send(res, 404, { error: "Not found" });
     if (!keyMatches(req.headers["x-admin-key"], adminKey)) return send(res, 401, { error: "Unauthorized" });
 
@@ -102,6 +104,28 @@ export function createServer(deps: ServerDeps): http.Server {
         console.error("[api] retryPending after start failed", err);
       }
       return send(res, 200, { stopped: false });
+    }
+
+    if (path === "/builder/task") {
+      const body = await readJson(req);
+      const task = body as { title?: unknown; description?: unknown } | null;
+      if (!task || typeof task !== "object" || Array.isArray(task)) {
+        return send(res, 400, { error: "Invalid task body" });
+      }
+      if (typeof task.title !== "string" || !task.title.trim()) {
+        return send(res, 400, { error: "title is required" });
+      }
+      if (typeof task.description !== "string" || !task.description.trim()) {
+        return send(res, 400, { error: "description is required" });
+      }
+      if (!builder) {
+        return send(res, 503, { error: "Builder service not configured" });
+      }
+      const result = await builder.handleTask({
+        title: task.title.trim(),
+        description: task.description.trim(),
+      });
+      return send(res, 200, result);
     }
 
     // POST /command

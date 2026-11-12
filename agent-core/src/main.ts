@@ -10,6 +10,7 @@ import { BackendClient } from "./tools/backend.js";
 import { EventSource, realtimeSubscribe, type Event } from "./events/events.js";
 import { HealthPoller } from "./events/health.js";
 import { AgentLoop } from "./agent/loop.js";
+import { BuilderService } from "./builder/builder.js";
 import { createServer } from "./api/server.js";
 import { trackInFlight } from "./lifecycle.js";
 
@@ -50,7 +51,8 @@ async function main(): Promise<void> {
     subscribe: realtimeSubscribe(config.supabaseUrl, config.supabaseKey),
   });
 
-  const server = createServer({ audit, state, loop, health, store, adminKey: config.adminKey });
+  const builder = new BuilderService({ audit, state, jev, gate });
+  const server = createServer({ audit, state, loop, health, store, adminKey: config.adminKey, builder });
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   log(`listening on ${config.port}`);
 
