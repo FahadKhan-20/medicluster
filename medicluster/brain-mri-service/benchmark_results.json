@@ -1,0 +1,74 @@
+{
+ "dataset": "Figshare brain tumor (Cheng), CC BY 4.0 \u2014 glioma/meningioma/pituitary, no 'no tumor' class",
+ "split": "stratified 80/20, numpy seed 1337",
+ "train": 2451,
+ "test": 613,
+ "feature_dim": 1280,
+ "baseline_original_tflite": {
+  "n": 613,
+  "accuracy": 0.6591,
+  "macro_f1": 0.6498,
+  "predicted_no_tumor": 58,
+  "per_class_recall": {
+   "glioma": 0.8281,
+   "meningioma": 0.7606,
+   "pituitary": 0.3226
+  }
+ },
+ "probe_on_tflite_features": {
+  "n": 613,
+  "accuracy": 0.9413,
+  "macro_f1": 0.9364,
+  "per_class_recall": {
+   "glioma": 0.9439,
+   "meningioma": 0.9085,
+   "pituitary": 0.9624
+  }
+ },
+ "hybrid_live_service": {
+  "n": 613,
+  "accuracy": 0.863,
+  "macro_f1": 0.8952,
+  "predicted_no_tumor": 51,
+  "note": "no-tumor gate cannot be validated on Figshare (no healthy scans); every no-tumor call here is wrong"
+ },
+ "probe_selective": [
+  {
+   "refer_share_train": 0.0,
+   "test_coverage": 1.0,
+   "answered": 613,
+   "referred": 0,
+   "accuracy": 0.9413,
+   "macro_f1": 0.9364,
+   "confidence_cutoff": -1.0
+  },
+  {
+   "refer_share_train": 0.05,
+   "test_coverage": 0.9592,
+   "answered": 588,
+   "referred": 25,
+   "accuracy": 0.9558,
+   "macro_f1": 0.9518,
+   "confidence_cutoff": 0.6342
+  },
+  {
+   "refer_share_train": 0.1,
+   "test_coverage": 0.9315,
+   "answered": 571,
+   "referred": 42,
+   "accuracy": 0.9667,
+   "macro_f1": 0.9625,
+   "confidence_cutoff": 0.772
+  },
+  {
+   "refer_share_train": 0.2,
+   "test_coverage": 0.8793,
+   "answered": 539,
+   "referred": 74,
+   "accuracy": 0.9796,
+   "macro_f1": 0.9759,
+   "confidence_cutoff": 0.9317
+  }
+ ],
+ "runtime_s": 66.7
+}
