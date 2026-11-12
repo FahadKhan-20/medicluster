@@ -21,7 +21,9 @@ import {
   Cpu,
   Server,
   Filter,
+  Bot,
 } from "lucide-react";
+import ChatView from "../chat/ChatView";
 
 const AGENT_CORE_URL = (import.meta.env.VITE_AGENT_CORE_URL || "http://localhost:8100").replace(/\/+$/, "");
 const AUDIT_POLL_MS = 3_000;
@@ -85,6 +87,7 @@ export default function AgentPage() {
   const [outcomeFilter, setOutcomeFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState(null);
+  const [activeTab, setActiveTab] = useState("audits");
 
   // Health fetch
   const fetchHealth = async () => {
@@ -202,8 +205,42 @@ export default function AgentPage() {
       actions={actions}
     >
       <div className="flex flex-col gap-6">
-        {/* Top Status & Controls Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="flex border-b border-line gap-6 text-sm font-medium">
+          <button
+            type="button"
+            onClick={() => setActiveTab("audits")}
+            className={`pb-2.5 transition-colors flex items-center gap-2 ${
+              activeTab === "audits"
+                ? "border-b-2 border-ink text-ink font-semibold"
+                : "text-slate-500 hover:text-ink"
+            }`}
+          >
+            <Activity size={16} />
+            <span>Audits & Control</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("chat")}
+            className={`pb-2.5 transition-colors flex items-center gap-2 ${
+              activeTab === "chat"
+                ? "border-b-2 border-ink text-ink font-semibold"
+                : "text-slate-500 hover:text-ink"
+            }`}
+            data-testid="agent-chat-tab"
+          >
+            <Bot size={16} />
+            <span>Agent Chat</span>
+          </button>
+        </div>
+
+        {activeTab === "chat" ? (
+          <div className="rounded-xl border border-line bg-paper overflow-hidden h-[720px] flex flex-col shadow-sm">
+            <ChatView isPanel={false} />
+          </div>
+        ) : (
+          <>
+            {/* Top Status & Controls Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Status & Kill Switch Card */}
           <Section
             title="Agent Operational State"
@@ -528,6 +565,8 @@ export default function AgentPage() {
             </div>
           </div>
         </Section>
+          </>
+        )}
       </div>
     </Page>
   );

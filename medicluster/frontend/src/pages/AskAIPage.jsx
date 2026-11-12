@@ -1,27 +1,26 @@
-import { useCallback, useRef, useState, useEffect } from "react";
-import { cliniqChat } from "../api/apiClient";
+import { useRef, useEffect } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { useCliniqChat } from "../chat/ChatContext";
 import CliniqActions from "../components/CliniqActions";
+import SuggestedChips from "../chat/SuggestedChips";
+import StepTimeline from "../chat/StepTimeline";
 import { Page, linkCls } from "../components/ui";
 import { PromptInput } from "../components/ui/ai-chat-input";
 import { ArrowUpRight, Hand, ScanLine, Bandage, Eye, Sparkles } from "lucide-react";
 
-const ACCEPT = "image/jpeg,image/png,image/gif,image/webp";
-
-// Starter prompts shown before the first message.
 const CATEGORIES = [
-  { tag: "SKIN", icon: Hand, tone: "sage", title: "Skin & rashes",  text: "I have an itchy red rash on my forearm" },
+  { tag: "SKIN", icon: Hand, tone: "sage", title: "Skin & rashes", text: "I have an itchy red rash on my forearm" },
   { tag: "X-RAY", icon: ScanLine, tone: "peach", title: "X-ray findings", text: "What does this X-ray finding mean?" },
-  { tag: "WOUND", icon: Bandage, tone: "forest", title: "Wounds",         text: "My wound is swollen and warm — is it infected?" },
-  { tag: "EYE", icon: Eye, tone: "lavender", title: "Eyes",           text: "Red, watery eye for two days" },
+  { tag: "WOUND", icon: Bandage, tone: "forest", title: "Wounds", text: "My wound is swollen and warm — is it infected?" },
+  { tag: "EYE", icon: Eye, tone: "lavender", title: "Eyes", text: "Red, watery eye for two days" },
 ];
 
 const LANGUAGES = [
-  { code: "en",  label: "English" },
-  { code: "hi",  label: "हिंदी" },
-  { code: "kn",  label: "ಕನ್ನಡ" },
-  { code: "te",  label: "తెలుగు" },
-  { code: "ta",  label: "தமிழ்" },
+  { code: "en", label: "English" },
+  { code: "hi", label: "हिंदी" },
+  { code: "kn", label: "ಕನ್ನಡ" },
+  { code: "te", label: "తెలుగు" },
+  { code: "ta", label: "தமிழ்" },
 ];
 
 function parseInline(text) {
@@ -88,7 +87,6 @@ function renderMarkdown(text) {
       continue;
     }
 
-    // Headings (###, ##, #)
     if (trimmed.startsWith("### ")) {
       elements.push(
         <h3 key={`h3-${i}`} className="text-[15px] font-bold text-slate-900 mt-4 mb-1.5 tracking-tight border-b border-slate-100 pb-1">
@@ -114,7 +112,6 @@ function renderMarkdown(text) {
       continue;
     }
 
-    // Bullet lists (*, -, +, •)
     if (/^[\*\-\+\•]\s+/.test(trimmed)) {
       elements.push(
         <div key={`bullet-${i}`} className="flex items-start gap-2.5 my-1 pl-1">
@@ -127,7 +124,6 @@ function renderMarkdown(text) {
       continue;
     }
 
-    // Numbered lists (1., 2., etc.)
     const numMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
     if (numMatch) {
       elements.push(
@@ -143,7 +139,6 @@ function renderMarkdown(text) {
       continue;
     }
 
-    // Regular paragraphs
     elements.push(
       <p key={`p-${i}`} className="my-1.5 text-[14px] text-slate-700 leading-relaxed">
         {parseInline(rawLine)}
@@ -156,117 +151,26 @@ function renderMarkdown(text) {
 
 export default function AskAIPage() {
   const { user } = useAuth();
-  const [messages, setMessages]         = useState([]);      // [{role, content, images?}]
-  const [loading, setLoading]           = useState(false);
-  const [error, setError]               = useState(null);
-  const [language, setLanguage]         = useState("en");
-  const [userLocation, setUserLocation] = useState(null);
-  const bottomRef                       = useRef();
-  const epoch = useRef(0);
-  const controller = useRef(null);
-  const retry = useRef(null);
-  const conversationId=useRef(crypto.randomUUID());
-  useEffect(() => {
-    epoch.current++;
-    controller.current?.abort();
-    setMessages([]); setError(null); setLoading(false); retry.current=null; conversationId.current=crypto.randomUUID();
-    return () => { epoch.current++; controller.current?.abort(); };
-  }, [user?.id, user?._id, user?.email]);
+  const {
+    messages,
+    loading,
+    error,
+    language,
+    setLanguage,
+    userLocation,
+    setUserLocation,
+    handleChatSubmit,
+    reset,
+  } = useCliniqChat();
 
-  useEffect(() => {
-    const locationEpoch=epoch.current;
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          if(locationEpoch!==epoch.current)return;
-          setUserLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
-        },
-        (err) => {
-          console.error("Error getting geolocation:", err.message);
-        }
-      );
-    }
-  }, [user?.id, user?._id, user?.email]);
+  const bottomRef = useRef();
 
   const scrollBottom = () =>
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
 
-  const handleChatSubmit = useCallback(async (question = "", attachedFiles = [], locationOverride, selectedPatient) => {
-    if (!question?.trim() && (!attachedFiles || attachedFiles.length === 0)) return;
-    const currentEpoch=epoch.current;
-    controller.current?.abort();
-    controller.current=new AbortController();
-    setLoading(true);
-    setError(null);
-
-    let convertedImages = [];
-    if (attachedFiles && attachedFiles.length > 0) {
-      convertedImages = await Promise.all(
-        attachedFiles.map((file) => {
-          return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const dataUrl = e.target.result;
-              const base64 = dataUrl.split(",")[1];
-              resolve({
-                preview: dataUrl,
-                base64,
-                mediaType: file.type || "image/jpeg",
-                name: file.name
-              });
-            };
-            reader.readAsDataURL(file);
-          });
-        })
-      );
-    }
-
-    if(currentEpoch!==epoch.current)return;
-
-    const history = messages.map((m) => ({ role: m.role, content: m.content }));
-    const next = [...messages];
-    if (question?.trim() || convertedImages.length > 0) {
-      next.push({
-        role: "user",
-        content: question?.trim() || "",
-        images: convertedImages.length > 0 ? convertedImages : undefined
-      });
-    }
-    setMessages(next);
+  useEffect(() => {
     scrollBottom();
-
-    try {
-      const fingerprint=JSON.stringify([question,history,convertedImages.map(img=>img.base64)]);
-      if(retry.current?.fingerprint!==fingerprint)retry.current={fingerprint,id:crypto.randomUUID()};
-      const data = await cliniqChat({
-        question: question.trim(), history, language,
-        location: locationOverride || userLocation,
-        images: convertedImages.map(({base64,mediaType})=>({base64,mediaType})),
-        requestId: retry.current.id,
-        conversationId:conversationId.current,selectedPatient,
-      },controller.current.signal);
-      if(currentEpoch!==epoch.current)return;
-      retry.current=null;
-      setMessages([...next, { role: "assistant", content: data.reply, agent: data, requestQuestion:question, requestFiles:attachedFiles }]);
-      scrollBottom();
-    } catch (e) {
-      if(currentEpoch!==epoch.current||e.code==='ERR_CANCELED')return;
-      setError(e.response?.data?.error || "AI Assistant temporarily unavailable. Please try again.");
-      setMessages(messages);
-    } finally {
-      if(currentEpoch===epoch.current)setLoading(false);
-    }
-  }, [messages, language, userLocation]);
-
-  const reset = () => {
-    epoch.current++; controller.current?.abort(); retry.current=null; conversationId.current=crypto.randomUUID(); setLoading(false);
-    setMessages([]);
-    setError(null);
-    setLanguage("en");
-  };
+  }, [messages.length, loading]);
 
   const count = messages.length;
 
@@ -283,93 +187,149 @@ export default function AskAIPage() {
             {count ? `Conversation · ${count} message${count === 1 ? "" : "s"}` : "New conversation"}
           </span>
           <div className="flex gap-4 items-center">
-            <label className="flex items-center gap-1">Reply in
-              <select value={language} onChange={(e) => setLanguage(e.target.value)} aria-label="Reply language"
-                className="bg-transparent text-ink focus:outline-none">
-                {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+            <label className="flex items-center gap-1">
+              Reply in
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                aria-label="Reply language"
+                className="bg-transparent text-ink focus:outline-none cursor-pointer"
+              >
+                {LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.label}
+                  </option>
+                ))}
               </select>
             </label>
-            {count > 0 && <button type="button" onClick={reset} className={linkCls}>New chat</button>}
+            {count > 0 && (
+              <button type="button" onClick={reset} className={linkCls}>
+                New chat
+              </button>
+            )}
           </div>
         </div>
 
         <div className="mc-cliniq-log" role="log" aria-live="polite">
           {count === 0 && (
             <div className="mc-cliniq-welcome">
-              <div className="mc-cliniq-intro"><span className="mc-cliniq-badge"><Sparkles size={15} aria-hidden="true" /> A little clarity, a little care</span><h2>What’s on your mind?</h2><p>Describe a symptom, share a photo, or start with a question below.</p></div>
+              <div className="mc-cliniq-intro">
+                <span className="mc-cliniq-badge">
+                  <Sparkles size={15} aria-hidden="true" /> A little clarity, a little care
+                </span>
+                <h2>What’s on your mind?</h2>
+                <p>Describe a symptom, share a photo, or start with a clinical query below.</p>
+              </div>
+
               <div className="mc-cliniq-categories">
-                {CATEGORIES.map(({ icon: Icon, ...category }) => <button key={category.tag} type="button" onClick={() => handleChatSubmit(category.text, [])} disabled={loading} className="mc-cliniq-category" data-tone={category.tone}>
-                  <span className="mc-cliniq-category-top"><span className="mc-cliniq-category-icon"><Icon size={25} strokeWidth={1.4} aria-hidden="true" /></span><ArrowUpRight size={18} aria-hidden="true" /></span>
-                  <span className="mc-cliniq-category-title">{category.title}</span><span className="mc-cliniq-category-prompt">{category.text}</span>
-                </button>)}
+                {CATEGORIES.map(({ icon: Icon, ...category }) => (
+                  <button
+                    key={category.tag}
+                    type="button"
+                    onClick={() => handleChatSubmit(category.text, [])}
+                    disabled={loading}
+                    className="mc-cliniq-category"
+                    data-tone={category.tone}
+                  >
+                    <span className="mc-cliniq-category-top">
+                      <span className="mc-cliniq-category-icon">
+                        <Icon size={25} strokeWidth={1.4} aria-hidden="true" />
+                      </span>
+                      <ArrowUpRight size={18} aria-hidden="true" />
+                    </span>
+                    <span className="mc-cliniq-category-title">{category.title}</span>
+                    <span className="mc-cliniq-category-prompt">{category.text}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-4 max-w-xl mx-auto w-full">
+                <SuggestedChips
+                  onSelect={(prompt) => handleChatSubmit(prompt, [])}
+                  disabled={loading}
+                />
               </div>
             </div>
           )}
 
-          {messages.map((msg, i) => msg.role === "user" ? (
-            <div key={i} className="mc-cliniq-user">
-              {msg.images && msg.images.length > 0 && (
-                <div className={`grid gap-2 ${msg.images.length === 1 ? "grid-cols-1 max-w-[240px]" : "grid-cols-2 sm:grid-cols-3 max-w-[420px]"}`}>
-                  {msg.images.map((img, idx) => (
-                    <figure key={idx} className="rounded overflow-hidden border border-line bg-surface shadow-xs">
-                      <img src={img.preview} alt={img.name} className="w-full aspect-[4/3] object-cover" />
-                      <figcaption className="font-mono text-[10px] text-slate-500 px-1.5 py-0.5 truncate text-center bg-slate-50">
-                        {img.name}
-                      </figcaption>
-                    </figure>
-                  ))}
-                </div>
-              )}
-              {msg.content && (
-                <div className="mc-cliniq-user-bubble">
-                  {msg.content}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div key={i} className="mc-cliniq-assistant">
-              <span className="mc-cliniq-assistant-avatar" aria-hidden="true">Q</span>
-              <div className="mc-cliniq-assistant-bubble">
-                {renderMarkdown(msg.content)}
-                <CliniqActions data={msg.agent} onSelect={(text,selected)=>handleChatSubmit(text,[],undefined,selected)} onLocation={()=>{
-                  const locationEpoch=epoch.current;
-                  if(!navigator.geolocation){setError('Location unavailable. Enter your city, or open Emergency to set pickup location.');return;}
-                  navigator.geolocation.getCurrentPosition(p=>{
-                    if(locationEpoch!==epoch.current)return;
-                    const location={latitude:p.coords.latitude,longitude:p.coords.longitude};
-                    setUserLocation(location);handleChatSubmit(msg.requestQuestion,msg.requestFiles||[],location);
-                  },()=>{if(locationEpoch===epoch.current)setError('Location permission denied. Enter your city, or set pickup in Emergency.');},{timeout:8000,maximumAge:0});
-                }}/>
+          {messages.map((msg, i) =>
+            msg.role === "user" ? (
+              <div key={i} className="mc-cliniq-user">
+                {msg.images && msg.images.length > 0 && (
+                  <div
+                    className={`grid gap-2 ${
+                      msg.images.length === 1 ? "grid-cols-1 max-w-[240px]" : "grid-cols-2 sm:grid-cols-3 max-w-[420px]"
+                    }`}
+                  >
+                    {msg.images.map((img, idx) => (
+                      <figure key={idx} className="rounded overflow-hidden border border-line bg-surface shadow-xs">
+                        <img src={img.preview} alt={img.name} className="w-full aspect-[4/3] object-cover" />
+                        <figcaption className="font-mono text-[10px] text-slate-500 px-1.5 py-0.5 truncate text-center bg-slate-50">
+                          {img.name}
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                )}
+                {msg.content && <div className="mc-cliniq-user-bubble">{msg.content}</div>}
               </div>
-            </div>
-          ))}
+            ) : (
+              <div key={i} className="mc-cliniq-assistant">
+                <span className="mc-cliniq-assistant-avatar" aria-hidden="true">
+                  Q
+                </span>
+                <div className="mc-cliniq-assistant-bubble">
+                  {renderMarkdown(msg.content)}
+                  {msg.agent && <StepTimeline agentData={msg.agent} />}
+                  <CliniqActions
+                    data={msg.agent}
+                    onSelect={(text, selected) => handleChatSubmit(text, [], undefined, selected)}
+                    onLocation={() => {
+                      if (!navigator.geolocation) return;
+                      navigator.geolocation.getCurrentPosition(
+                        (p) => {
+                          const location = { latitude: p.coords.latitude, longitude: p.coords.longitude };
+                          setUserLocation(location);
+                          handleChatSubmit(msg.requestQuestion, msg.requestFiles || [], location);
+                        },
+                        () => {},
+                        { timeout: 8000, maximumAge: 0 }
+                      );
+                    }}
+                  />
+                </div>
+              </div>
+            )
+          )}
 
           {loading && (
             <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-3.5 items-center">
-              <span className="w-7 h-7 grid place-items-center border border-ink rounded-sm"><span className="spinner w-3.5 h-3.5" /></span>
-              <span className="eyebrow">
-                Thinking…
+              <span className="w-7 h-7 grid place-items-center border border-ink rounded-sm">
+                <span className="spinner w-3.5 h-3.5" />
               </span>
+              <span className="eyebrow">Thinking…</span>
             </div>
           )}
           <div ref={bottomRef} />
         </div>
 
         <div className="mc-cliniq-composer">
-        {error && <p role="alert" className="text-[13px] text-red-700 pb-3">{error}</p>}
+          {error && <p role="alert" className="text-[13px] text-red-700 pb-3">{error}</p>}
 
-        <div className="w-full flex justify-center pt-2">
-          <PromptInput
-            className="w-full"
-            fullWidth={true}
-            showModelSelect={false}
-            showEffort={false}
-            placeholder={count ? "Ask a follow-up, or describe a symptom…" : "Describe a symptom or attach photos…"}
-            disabled={loading}
-            onSubmit={(text, meta) => handleChatSubmit(text, meta.attachments)}
-          />
-        </div>
-        <p className="mc-cliniq-footnote">AI guidance only. Not a diagnosis — consult a clinician before starting treatment.</p>
+          <div className="w-full flex justify-center pt-2">
+            <PromptInput
+              className="w-full"
+              fullWidth={true}
+              showModelSelect={false}
+              showEffort={false}
+              placeholder={count ? "Ask a follow-up, or describe a symptom…" : "Describe a symptom or attach photos…"}
+              disabled={loading}
+              onSubmit={(text, meta) => handleChatSubmit(text, meta.attachments)}
+            />
+          </div>
+          <p className="mc-cliniq-footnote">
+            AI guidance only. Not a diagnosis — consult a clinician before starting treatment.
+          </p>
         </div>
       </div>
     </Page>

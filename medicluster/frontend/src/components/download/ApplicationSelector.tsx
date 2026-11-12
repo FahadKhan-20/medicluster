@@ -7,6 +7,7 @@ import {
   HeartPulse,
   RadioTower,
   Stethoscope,
+  MessageCircle,
 } from "lucide-react";
 import { createAndroidDownloader } from "@/patient-app/patientDownload";
 import type { PatientRelease, ProductApp } from "./appTypes";
@@ -16,6 +17,7 @@ const ICONS = {
   patient: HeartPulse,
   dispatch: RadioTower,
   crew: Ambulance,
+  cliniq: MessageCircle,
 };
 
 export default function ApplicationSelector({

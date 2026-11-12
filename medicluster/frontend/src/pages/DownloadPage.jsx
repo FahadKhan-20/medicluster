@@ -9,6 +9,7 @@ import {
   Heart,
   Route,
   Ambulance,
+  MessageCircle,
 } from "lucide-react";
 import Logo from "../components/Logo";
 import ApplicationSelector from "../components/download/ApplicationSelector";
@@ -38,6 +39,7 @@ const ICONS = {
   heart: Heart,
   route: Route,
   ambulance: Ambulance,
+  cliniq: MessageCircle,
 };
 
 export default function DownloadPage() {

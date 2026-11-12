@@ -8,6 +8,7 @@ import { isPatientAndroid } from "./patient-app/patientPlatform";
 const DownloadPage = lazy(() => import("./pages/DownloadPage"));
 const PatientApp = lazy(() => import("./patient-app/PatientApp"));
 const ClinicalWorkspace = lazy(() => import("./ClinicalWorkspace"));
+const CliniqAppPage = lazy(() => import("./pages/CliniqAppPage"));
 
 export default function App() {
   return <Suspense fallback={<div className="min-h-screen bg-[#ffffff]" aria-label="Loading" aria-busy="true" />}><AppContent /></Suspense>;
@@ -27,6 +28,9 @@ function AppContent() {
 
   if (pathname === "/download" || (pathname === "/" && user === null)) return <DownloadPage />;
   if (pathname === "/login") return <LoginPage />;
+  if (pathname === "/cliniq" || pathname.startsWith("/cliniq")) {
+    return <RequireAuth><CliniqAppPage /></RequireAuth>;
+  }
   if (pathname === "/onboarding") {
     return <RequireAuth allowUnonboarded><OnboardingPage /></RequireAuth>;
   }
