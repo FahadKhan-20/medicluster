@@ -13,6 +13,7 @@ import { AgentLoop } from "./agent/loop.js";
 import { registerRemindersWorkflow } from "./workflows/reminders.js";
 import { createServer } from "./api/server.js";
 import { trackInFlight } from "./lifecycle.js";
+import { registerRadarWorkflow } from "./workflows/radar.js";
 
 const RETRY_INTERVAL_MS = 60_000;
 
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
   const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health, store });
   const reminders = registerRemindersWorkflow({ jev, llm, audit, state, gate, backend, store, health });
   const work = trackInFlight();
+  const radar = registerRadarWorkflow({ jev, llm, audit, state, gate, backend, health, subscribe: realtimeSubscribe(config.supabaseUrl, config.supabaseKey), work });
   const retry = work.wrap(() =>
     loop.retryPending().catch((err) => console.error("[agent-core] retryPending failed", err)),
   );

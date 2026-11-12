@@ -3,4 +3,5 @@ groups:
   imaging: auto
   alerts: auto
   reminders: auto
+  radar: auto
 rate_limit_per_minute: 30
