@@ -19,6 +19,7 @@ const allowed = [
   ['GET', new RegExp(`^/radar/sessions/${id}$`)],
   ['GET', new RegExp(`^/radar/sessions/${id}/export$`)],
   ['POST', new RegExp(`^/radar/sessions/${id}/(step|readings|forecast)$`)],
+  ['POST', /^\/ecg\/analyze$/],
 ];
 function configuration() {
   const token = process.env.INTELLIGENCE_TOKEN;

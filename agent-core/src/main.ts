@@ -15,6 +15,7 @@ import { registerRemindersWorkflow } from "./workflows/reminders.js";
 import { registerSelfheal } from "./selfheal/index.js";
 import { createDispatchWorkflow } from "./workflows/dispatch.js";
 import { BuilderService } from "./builder/builder.js";
+import { EcgWorkflow } from "./workflows/ecg.js";
 import { createServer } from "./api/server.js";
 import { trackInFlight } from "./lifecycle.js";
 import { registerRadarWorkflow } from "./workflows/radar.js";
@@ -61,6 +62,7 @@ async function main(): Promise<void> {
     health,
     dispatchClient,
   });
+  const ecgWorkflow = new EcgWorkflow({ jev, llm, audit, state, gate, backend, health });
   const work = trackInFlight();
   const radar = registerRadarWorkflow({ jev, llm, audit, state, gate, backend, health, subscribe: realtimeSubscribe(config.supabaseUrl, config.supabaseKey), work });
   const selfheal = registerSelfheal(health, { jev, llm, audit, state, gate, backend, work });

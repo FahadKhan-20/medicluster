@@ -10,6 +10,7 @@ from werkzeug.exceptions import HTTPException
 from runtime import ApiError
 import brain
 import radar
+import ecg
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 128 * 1024 * 1024
@@ -42,9 +43,10 @@ def unexpected(error):
     return jsonify(error='Intelligence worker could not complete this request'), 500
 
 @app.get('/health')
-def health(): return jsonify(service='medicluster-intelligence', brain=brain.status(), radar=radar.status())
+def health(): return jsonify(service='medicluster-intelligence', brain=brain.status(), radar=radar.status(), ecg=ecg.status())
 
 app.register_blueprint(brain.bp)
 app.register_blueprint(radar.bp)
+app.register_blueprint(ecg.bp)
 
 if __name__ == '__main__': app.run(host='127.0.0.1', port=8090, threaded=True, debug=False)

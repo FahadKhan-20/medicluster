@@ -7,4 +7,5 @@ groups:
   selfheal: auto
   dispatch: suggest
   builder: suggest
+  ecg: auto
 rate_limit_per_minute: 30
