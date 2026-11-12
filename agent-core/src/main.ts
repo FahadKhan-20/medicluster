@@ -54,7 +54,6 @@ async function main(): Promise<void> {
   });
   const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health, store });
   const reminders = registerRemindersWorkflow({ jev, llm, audit, state, gate, backend, store, health });
-  const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health });
   const dispatchWorkflow = createDispatchWorkflow({
     jev,
     llm,
@@ -67,13 +66,25 @@ async function main(): Promise<void> {
   const ecgWorkflow = new EcgWorkflow({ jev, llm, audit, state, gate, backend, health });
   const sepsis = new SepsisWorkflow({ jev, llm, audit, state, gate, backend, health });
   const work = trackInFlight();
-  const radar = registerRadarWorkflow({ jev, llm, audit, state, gate, backend, health, subscribe: realtimeSubscribe(config.supabaseUrl, config.supabaseKey), work });
+  const radar = registerRadarWorkflow({ jev, llm, audit, state, gate, backend, health, subscribe: realtimeSubscribe(config.supabaseUrl, config.supabaseKey, "readings"), work });
+  // ECG records and vitals readings feed the ECG and sepsis workflows.
+  const ecgHandle = work.wrap((e: any) => ecgWorkflow.handle(e).then(() => undefined));
+  const sepsisHandle = work.wrap((e: any) => sepsis.handle(e).then(() => undefined));
+  realtimeSubscribe(config.supabaseUrl, config.supabaseKey, "ecgrecords")((p) => {
+    const d = p.new?.data;
+    if (p.eventType !== "INSERT" || !d?._id) return;
+    void ecgHandle({ id: `${d._id}:new`, type: "ecg.uploaded", recordId: d._id, patientId: d.patient_id ?? d.patientId, doc: d, at: d.createdAt ?? new Date().toISOString() });
+  });
+  realtimeSubscribe(config.supabaseUrl, config.supabaseKey, "readings")((p) => {
+    const d = p.new?.data;
+    if (p.eventType !== "INSERT" || !d?._id) return;
+    void sepsisHandle({ id: `sepsis:${d._id}`, type: "scan.analyzed", mediaId: d._id, doc: d, at: d.createdAt ?? new Date().toISOString() });
+  });
   const selfheal = registerSelfheal(health, { jev, llm, audit, state, gate, backend, work });
   const retry = work.wrap(() =>
     Promise.all([
       loop.retryPending().catch((err) => console.error("[agent-core] loop retryPending failed", err)),
       selfheal.retryPending().catch((err) => console.error("[agent-core] selfheal retryPending failed", err)),
-      loop.retryPending().catch((err) => console.error("[agent-core] retryPending loop failed", err)),
       dispatchWorkflow.retryPending().catch((err) => console.error("[agent-core] retryPending dispatch failed", err)),
     ]),
   );
@@ -109,8 +120,10 @@ async function main(): Promise<void> {
   });
 
   const builder = new BuilderService({ audit, state, jev, gate });
-  const server = createServer({ audit, state, loop, health, store, adminKey: config.adminKey, builder });
-  const server = createServer({ audit, state, loop, health, store, adminKey: config.adminKey, codeblue: new CodeBlueEngine({ jev, gate, audit, state, llm }) });
+  const server = createServer({
+    audit, state, loop, health, store, adminKey: config.adminKey, builder,
+    codeblue: new CodeBlueEngine({ jev, gate, audit, state, llm }),
+  });
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   log(`listening on ${config.port}`);
 

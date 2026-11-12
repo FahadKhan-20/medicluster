@@ -85,6 +85,8 @@ export function createServer(deps: ServerDeps): http.Server {
 
     if (method === "GET" && (path === "/console" || path === "/console/" || path === "/console/index.html")) {
       return sendHtml(res, 200, getConsoleHtml());
+    }
+
     if (deps.codeblue && (await handleCodeBlueRoute(req, res, deps.codeblue, adminKey, keyMatches))) {
       return;
     }

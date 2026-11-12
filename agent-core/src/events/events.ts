@@ -204,15 +204,15 @@ export class EventSource {
 }
 
 /** Thin wrapper over Supabase Realtime; not unit-tested against a live server. */
-export function realtimeSubscribe(supabaseUrl: string, key: string): Subscribe {
+export function realtimeSubscribe(supabaseUrl: string, key: string, collection = "patientmedias"): Subscribe {
   return (onRow, onReconnect) => {
     const supabase = createClient(supabaseUrl, key);
     let degraded = false;
     const channel = supabase
-      .channel("agent-core")
+      .channel(`agent-core-${collection}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "medicluster_records", filter: "collection=eq.patientmedias" },
+        { event: "*", schema: "public", table: "medicluster_records", filter: `collection=eq.${collection}` },
         (payload: any) => onRow({ eventType: payload.eventType, new: payload.new, old: payload.old }),
       )
       .subscribe((status: string) => {
