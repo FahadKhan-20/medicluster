@@ -7,6 +7,8 @@ const express = require("express");
 const { isValidId } = require("../db/ids");
 const Reminder = require("../models/Reminder");
 const ReminderNotification = require("../models/ReminderNotification");
+const Pharmacy = require("../models/Pharmacy");
+const PharmacyOrder = require("../models/PharmacyOrder");
 
 const { requireAuth, requirePatientOrClinician, canAccessPatient } = require("../middleware/auth");
 
@@ -160,15 +162,53 @@ router.patch("/:id", async (req, res, next) => {
     return res.status(400).json({ error: "Invalid reminder id" });
   }
   try {
+    const { refillPharmacyId, fulfilment = "pickup", deliveryAddress } = req.body;
+    let refillOrderId;
+    if (refillPharmacyId) {
+      const pharmacy = await Pharmacy.findById(refillPharmacyId).lean();
+      if (!pharmacy || !pharmacy.active) {
+        return res.status(400).json({ error: "Invalid or inactive pharmacy" });
+      }
+      if (fulfilment === "delivery") {
+        if (!deliveryAddress || typeof deliveryAddress.text !== "string" || !deliveryAddress.text.trim()) {
+          return res.status(400).json({ error: "deliveryAddress is required for delivery fulfilment" });
+        }
+      }
+      const order = await PharmacyOrder.create({
+        patientId: current.patientId,
+        pharmacyId: String(pharmacy._id),
+        source: {
+          type: "refill",
+          reminderId: String(current._id),
+        },
+        items: [
+          { drug: current.medicationName, dose: current.dosage || "", quantity: 1 }
+        ],
+        fulfilment,
+        deliveryAddress: fulfilment === "delivery" ? deliveryAddress : null,
+        status: "new",
+        statusHistory: [{
+          status: "new",
+          at: new Date(),
+          byKind: req.session?.kind || "patient",
+          byId: String(req.session?.sub || current.patientId),
+        }],
+      });
+      refillOrderId = String(order._id);
+    }
+
     const allowed = ["medicationName", "dosage", "times", "frequency", "days", "notes", "active", "pillsLeft", "refillRequestedAt"];
     const update = Object.fromEntries(
       Object.entries(req.body).filter(([k]) => allowed.includes(k))
     );
+    if (refillOrderId && !update.refillRequestedAt) {
+      update.refillRequestedAt = new Date();
+    }
     const invalid=['times','frequency','days'].some(key=>Object.hasOwn(update,key))?scheduleError({...current,...update}):null;
     if(invalid)return res.status(400).json({error:invalid});
     const updated = await Reminder.findOneAndUpdate({_id:req.params.id,patientId:current.patientId,updatedAt:current.updatedAt}, {$set:update}, { new: true }).lean();
     if (!updated) return res.status(409).json({ error: "Reminder changed; refresh and try again" });
-    return res.json(updated);
+    return res.json({ ...updated, ...(refillOrderId ? { refillOrderId } : {}) });
   } catch (err) {
     return next(err);
   }

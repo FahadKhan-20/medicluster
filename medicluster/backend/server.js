@@ -75,6 +75,7 @@ app.use("/api/ml",      requireAuth, mlRoutes);
 app.use("/api/health",  healthRoutes);
 app.use("/api/settings", requireAuth, settingsRoutes);
 app.use("/api/agent",    require("./routes/agentRoutes"));
+app.use("/api/patient-app", require("./routes/patientPharmacyRoutes"));
 app.use("/api/patient-app", require("./routes/patientFeatureRoutes"));
 app.use("/api/patient-app", patientAppRoutes);
 

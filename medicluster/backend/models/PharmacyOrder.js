@@ -52,6 +52,8 @@ const ORDER_STATUSES = [
 const PharmacyOrderSchema = defineSchema(
   {
     patientId:       { type: String, required: true, index: true },
+    patientName:     { type: String, default: "" },
+    patientPhone:    { type: String, default: "" },
     pharmacyId:      { type: String, required: true, index: true },
     source:          { type: SourceSchema, required: true },
     items:           { type: [OrderItemSchema], default: [] },

@@ -8,6 +8,7 @@ const PharmacyOrder = require("../models/PharmacyOrder");
 const PharmacyStock = require("../models/PharmacyStock");
 const Delivery = require("../models/Delivery");
 const Prescription = require("../models/Prescription");
+const PharmacyOrderOtp = require("../models/PharmacyOrderOtp");
 const { transition, hashOtp, otpMatches } = require("./pharmacyOrders");
 
 const _testOtps = new Map();
@@ -16,8 +17,16 @@ function _getTestOtp(orderId) {
   return _testOtps.get(String(orderId)) || null;
 }
 
-function _setTestOtp(orderId, otp) {
+async function _setTestOtp(orderId, otp, patientId) {
   _testOtps.set(String(orderId), otp);
+  if (patientId) {
+    await PharmacyOrderOtp.deleteMany({ orderId: String(orderId) });
+    await PharmacyOrderOtp.create({
+      orderId: String(orderId),
+      patientId: String(patientId),
+      otp: String(otp),
+    });
+  }
 }
 
 function publicOrder(order, viewerKind) {
@@ -82,6 +91,13 @@ async function applyAction(orderId, action, actor, input = {}) {
       transitionedOrder.handoverOtpHash = hashOtp(plainOtp);
       transitionedOrder.otpAttempts = 0;
       _testOtps.set(String(transitionedOrder._id), plainOtp);
+      await PharmacyOrderOtp.deleteMany({ orderId: String(transitionedOrder._id) });
+      await PharmacyOrderOtp.create({
+        orderId: String(transitionedOrder._id),
+        patientId: String(transitionedOrder.patientId),
+        otp: plainOtp,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      });
     } else if (effect.type === "decrement_stock") {
       const stocks = await PharmacyStock.find({ pharmacyId: String(transitionedOrder.pharmacyId) }).lean();
       for (const item of (effect.items || [])) {
@@ -127,6 +143,11 @@ async function applyAction(orderId, action, actor, input = {}) {
     transitionedOrder.source?.prescriptionId
   ) {
     await Prescription.findByIdAndUpdate(transitionedOrder.source.prescriptionId, { status: "fulfilled" });
+  }
+
+  if (["picked_up", "delivered", "cancelled"].includes(transitionedOrder.status)) {
+    await PharmacyOrderOtp.deleteMany({ orderId: String(transitionedOrder._id) });
+    _testOtps.delete(String(transitionedOrder._id));
   }
 
   const saved = await PharmacyOrder.findByIdAndUpdate(
