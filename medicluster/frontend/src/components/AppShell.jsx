@@ -4,7 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { getMlHealth } from "../api/apiClient";
 import { NAV_GROUPS, NAV_ITEMS, isActive } from "../navigation";
 import Logo from "./Logo";
-import { Bell, ChartNoAxesCombined, ScanLine, Brain, Activity, Users, CalendarClock, FileText, MessageCircle, Sparkles, Hospital, Radio, Menu as MenuIcon } from "lucide-react";
+import { Bell, ChartNoAxesCombined, ScanLine, Brain, Activity, Users, CalendarClock, FileText, MessageCircle, Sparkles, Hospital, Radio, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 
 const NAV_ICONS = { Alerts: Bell, Dashboard: ChartNoAxesCombined, Imaging: ScanLine, "3D Tumor Explorer": Brain, "Deterioration Radar": Activity, Patients: Users, Reminders: CalendarClock, Reports: FileText, CliniQ: MessageCircle, "Clinical AI": Sparkles, Hospitals: Hospital, Dispatch: Radio };
 
@@ -52,6 +52,15 @@ export default function AppShell({ children }) {
   const { pathname } = useLocation();
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarClosed, setSidebarClosed] = useState(() => {
+    try { return localStorage.getItem("mc_sidebar_closed") === "true"; }
+    catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("mc_sidebar_closed", String(sidebarClosed)); }
+    catch { /* Navigation still works when browser storage is unavailable. */ }
+  }, [sidebarClosed]);
 
   useEffect(() => setMenuOpen(false), [pathname]);
   useEffect(() => {
@@ -62,7 +71,7 @@ export default function AppShell({ children }) {
   }, [menuOpen]);
 
   return (
-    <div className="mc-workspace min-h-screen grid min-[860px]:grid-cols-[216px_minmax(0,1fr)] bg-paper text-ink">
+    <div className={`mc-workspace ${sidebarClosed ? "mc-sidebar-closed" : ""} min-h-screen grid min-[860px]:grid-cols-[216px_minmax(0,1fr)] bg-paper text-ink`}>
       {menuOpen && (
         <div className="fixed inset-0 z-30 bg-black/35 min-[860px]:hidden" onClick={() => setMenuOpen(false)} aria-hidden="true" />
       )}
@@ -73,10 +82,14 @@ export default function AppShell({ children }) {
           min-[860px]:sticky min-[860px]:top-0 min-[860px]:h-screen min-[860px]:w-auto min-[860px]:translate-x-0 min-[860px]:transition-none
           flex flex-col gap-7 px-3.5 pt-[22px] pb-[18px] border-r border-line bg-paper overflow-auto`}
       >
-        <Link to="/" className="flex items-center gap-[9px] px-2 text-ink">
+        <div className="mc-sidebar-heading">
+        <Link to="/" className="flex items-center gap-[9px] text-ink min-w-0">
           <Logo className="w-[18px] h-[18px]" />
           <span className="font-serif text-[21px] tracking-[-0.01em]">MediCluster</span>
         </Link>
+        <button type="button" className="mc-sidebar-toggle mc-sidebar-desktop-toggle" aria-label="Close sidebar" aria-expanded="true" aria-controls="app-sidebar" title="Close sidebar" onClick={() => setSidebarClosed(true)}><PanelLeftClose size={19} aria-hidden="true" /></button>
+        <button type="button" className="mc-sidebar-toggle min-[860px]:hidden" aria-label="Close menu" onClick={() => setMenuOpen(false)}><X size={19} aria-hidden="true" /></button>
+        </div>
 
         <nav className="flex flex-col gap-5" aria-label="Main">
           {NAV_GROUPS.map((g) => (
@@ -102,6 +115,7 @@ export default function AppShell({ children }) {
       </aside>
 
       <div className="mc-workspace-body min-w-0 flex flex-col">
+        {sidebarClosed && <button type="button" className="mc-sidebar-toggle mc-sidebar-reopen" aria-label="Open sidebar" aria-expanded="false" aria-controls="app-sidebar" title="Open sidebar" onClick={() => setSidebarClosed(false)}><PanelLeftOpen size={20} aria-hidden="true" /></button>}
         <button type="button" className="mc-mobile-menu" onClick={() => setMenuOpen(o => !o)} aria-label={menuOpen ? "Close" : "Menu"} aria-expanded={menuOpen} aria-controls="app-sidebar"><MenuIcon size={20} aria-hidden="true" /></button>
         <main className="mc-workspace-main flex-1 min-w-0">{children}</main>
       </div>

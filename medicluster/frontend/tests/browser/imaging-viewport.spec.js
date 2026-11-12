@@ -10,10 +10,10 @@ async function setup(page) {
     let json = [];
     if (path === '/api/auth/me') json = { user: { id: 'test', name: 'Demo clinician', onboarded: true } };
     if (path === '/api/media/models') json = { default: analysis.model, models: [{id: analysis.model, label: 'Chest detector', modality: 'chest-xray'}, {id: 'densenet121-res224-all', label: 'Chest classifier', modality: 'chest-xray'}, {id: 'brain-mri-tflite', label: 'Brain MRI', modality: 'brain-mri'}] };
-    if (path === '/api/media/upload') json = { gridfs_id: `upload-${++uploaded}`, original_name: 'demo.png', file_type: 'image', size: 1234 };
+    if (path === '/api/media/upload') json = { gridfs_id: (++uploaded + 100).toString(16).padStart(24, '0'), original_name: 'demo.png', file_type: 'image', size: 1234 };
     if (path.startsWith('/api/media/analyze/')) json = analysis;
     if (path.startsWith('/api/media/file/') && route.request().method() === 'GET') return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="#666"/></svg>' });
-    if (path === '/api/media/demo') json = Array.from({ length: 8 }, (_, i) => ({ gridfs_id: `demo-${i}`, original_name: `demo-${i}.png`, file_type: 'image', patient_id: 'demo', analysis }));
+    if (path === '/api/media/demo') json = Array.from({ length: 8 }, (_, i) => ({ gridfs_id: (i + 1).toString(16).padStart(24, '0'), original_name: `demo-${i}.png`, file_type: 'image', patient_id: 'demo', analysis }));
     if (path.startsWith('/api/media/record/')) json = { recordedAt: '2026-10-24', patient_id: 'demo' };
     if (path.startsWith('/api/media/review/')) json = { reviewRequestedAt: '2026-10-24' };
     if (path.startsWith('/api/media/explain/')) json = { explanation: 'Review every candidate finding with clinical context. '.repeat(30) };

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { aiChat } from "../../api/apiClient";
+import { cliniqChat } from "../../api/apiClient";
+import CliniqActions from "../../components/CliniqActions";
 import { usePatient } from "../PatientApp";
 import { Eyebrow, ErrorNote } from "../ui";
 
@@ -100,7 +101,7 @@ function readImage(file) {
 }
 
 export default function CliniqScreen() {
-  const { profile, apiError } = usePatient();
+  const { profile, patientId, apiError } = usePatient();
   const [language, setLanguage] = useState("en");
   const [messages, setMessages] = useState([]); // { role, content, image? }
   const [image, setImage] = useState(null);      // image for the whole conversation
@@ -112,32 +113,42 @@ export default function CliniqScreen() {
   const fileRef = useRef(null);
   const scrollRef = useRef(null);
   const location = useRef(null);
+  const epoch = useRef(0), controller=useRef(null), retry=useRef(null);
+  const conversationId=useRef(crypto.randomUUID());
+  useEffect(()=>{
+    epoch.current++;controller.current?.abort();retry.current=null;conversationId.current=crypto.randomUUID();
+    setMessages([]);setImage(null);setPendingImage(null);setInput('');setError('');setNotice('');setSending(false);location.current=null;
+    return ()=>{epoch.current++;controller.current?.abort();};
+  },[patientId]);
 
   useEffect(() => {
+    const locationEpoch=epoch.current;
     navigator.geolocation?.getCurrentPosition(
-      (p) => { location.current = { latitude: p.coords.latitude, longitude: p.coords.longitude }; },
+      (p) => { if(locationEpoch===epoch.current)location.current = { latitude: p.coords.latitude, longitude: p.coords.longitude }; },
       () => {},
       { timeout: 8000 }
     );
-  }, []);
+  }, [patientId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, sending]);
 
   const pickImage = async (e) => {
+    const imageEpoch=epoch.current;
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     if (!file.type.startsWith("image/")) return setError("Please choose a photo.");
     if (file.size > 8 * 1024 * 1024) return setError("That photo is too large (max 8 MB).");
     setError("");
-    setPendingImage(await readImage(file));
+    const image=await readImage(file);
+    if(imageEpoch===epoch.current)setPendingImage(image);
   };
 
-  const send = async (e) => {
-    e.preventDefault();
-    const question = input.trim();
+  const send = async (e, overrideQuestion) => {
+    e?.preventDefault();
+    const question = (overrideQuestion ?? input).trim();
     if (sending || (!question && !pendingImage)) return;
 
     const convoImage = pendingImage ?? image;
@@ -149,15 +160,25 @@ export default function CliniqScreen() {
     if (pendingImage) setImage(pendingImage);
     setSending(true);
     setError("");
+    const currentEpoch=epoch.current;
+    controller.current?.abort();controller.current=new AbortController();
     try {
-      const data = await aiChat(
-        convoImage?.base64 ?? null, convoImage?.mediaType, history, userMsg.content, language, location.current
-      );
-      setMessages((m) => [...m, { role: "assistant", content: data.reply }]);
+      const fingerprint=JSON.stringify([question,history,convoImage?.base64||'']);
+      if(retry.current?.fingerprint!==fingerprint)retry.current={fingerprint,id:crypto.randomUUID()};
+      const data = await cliniqChat({question:userMsg.content,history,language,location:location.current,
+        images:convoImage?[{base64:convoImage.base64,mediaType:convoImage.mediaType}]:[],requestId:retry.current.id,conversationId:conversationId.current},controller.current.signal);
+      if(currentEpoch!==epoch.current)return;
+      retry.current=null;
+      setMessages((m) => [...m, { role: "assistant", content: data.reply, agent:data, requestQuestion:userMsg.content }]);
     } catch (err) {
+      if(currentEpoch!==epoch.current||err.code==='ERR_CANCELED')return;
+      setMessages(messages);
+      setInput(current=>current||question);
+      setPendingImage(current=>current||pendingImage);
+      setImage(image);
       setError(apiError(err));
     } finally {
-      setSending(false);
+      if(currentEpoch===epoch.current)setSending(false);
     }
   };
 
@@ -197,11 +218,11 @@ export default function CliniqScreen() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-[18px] pt-[18px] pb-4 flex flex-col gap-[18px]">
         {messages.length === 0 && (
           <div className="flex flex-col gap-2 pr-5">
-            <Eyebrow>ASK ABOUT A SYMPTOM</Eyebrow>
-            <span className="font-serif text-[26px] leading-[1.1]">What’s bothering you?</span>
+            <Eyebrow>YOUR PATIENT APP ASSISTANT</Eyebrow>
+            <span className="font-serif text-[26px] leading-[1.1]">How can I help?</span>
             <p className="m-0 text-sm leading-relaxed text-slate-600">
-              Describe it in your own words, or add a photo of a rash, wound or report.
-              CliniQ explains it in plain language and tells you when to see a doctor.
+              Ask about your readings, reports, appointments or reminders. Find nearby hospitals,
+              request emergency help, explore app features, or discuss a symptom or photo.
             </p>
           </div>
         )}
@@ -215,7 +236,17 @@ export default function CliniqScreen() {
               </div>
             </div>
           ) : (
-            <AssistantReply key={i} text={m.content} doctor={profile?.nextVisit?.doctor} onShare={share} />
+            <div key={i}>
+              <AssistantReply text={m.content} doctor={profile?.nextVisit?.doctor} onShare={share} />
+              <CliniqActions data={m.agent} onSelect={text=>send(null,text)} onLocation={()=>{
+                const locationEpoch=epoch.current;
+                if(!navigator.geolocation){setError('Location unavailable. Open Emergency to set pickup location, or enter your city.');return;}
+                navigator.geolocation.getCurrentPosition(p=>{
+                  if(locationEpoch!==epoch.current)return;
+                  location.current={latitude:p.coords.latitude,longitude:p.coords.longitude};send(null,m.requestQuestion);
+                },()=>{if(locationEpoch===epoch.current)setError('Location permission denied. Open Emergency to set pickup location, or enter your city.');},{timeout:8000,maximumAge:0});
+              }}/>
+            </div>
           )
         )}
 

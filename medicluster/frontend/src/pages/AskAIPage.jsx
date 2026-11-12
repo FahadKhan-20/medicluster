@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { aiChat } from "../api/apiClient";
+import { cliniqChat } from "../api/apiClient";
+import { useAuth } from "../auth/AuthContext";
+import CliniqActions from "../components/CliniqActions";
 import { Page, linkCls } from "../components/ui";
 import { PromptInput } from "../components/ui/ai-chat-input";
 import { ArrowUpRight, Hand, ScanLine, Bandage, Eye, Sparkles } from "lucide-react";
@@ -30,7 +32,7 @@ function parseInline(text) {
     if (!part) return null;
     if (part.startsWith("[") && part.includes("](") && part.endsWith(")")) {
       const match = part.match(/\[([^\]]+)\]\(([^)]+)\)/);
-      if (match) {
+      if (match && /^https?:\/\//i.test(match[2])) {
         return (
           <a
             key={idx}
@@ -153,17 +155,30 @@ function renderMarkdown(text) {
 }
 
 export default function AskAIPage() {
+  const { user } = useAuth();
   const [messages, setMessages]         = useState([]);      // [{role, content, images?}]
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState(null);
   const [language, setLanguage]         = useState("en");
   const [userLocation, setUserLocation] = useState(null);
   const bottomRef                       = useRef();
+  const epoch = useRef(0);
+  const controller = useRef(null);
+  const retry = useRef(null);
+  const conversationId=useRef(crypto.randomUUID());
+  useEffect(() => {
+    epoch.current++;
+    controller.current?.abort();
+    setMessages([]); setError(null); setLoading(false); retry.current=null; conversationId.current=crypto.randomUUID();
+    return () => { epoch.current++; controller.current?.abort(); };
+  }, [user?.id, user?._id, user?.email]);
 
   useEffect(() => {
+    const locationEpoch=epoch.current;
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
+          if(locationEpoch!==epoch.current)return;
           setUserLocation({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude
@@ -174,13 +189,16 @@ export default function AskAIPage() {
         }
       );
     }
-  }, []);
+  }, [user?.id, user?._id, user?.email]);
 
   const scrollBottom = () =>
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
 
-  const handleChatSubmit = useCallback(async (question = "", attachedFiles = []) => {
+  const handleChatSubmit = useCallback(async (question = "", attachedFiles = [], locationOverride, selectedPatient) => {
     if (!question?.trim() && (!attachedFiles || attachedFiles.length === 0)) return;
+    const currentEpoch=epoch.current;
+    controller.current?.abort();
+    controller.current=new AbortController();
     setLoading(true);
     setError(null);
 
@@ -206,6 +224,8 @@ export default function AskAIPage() {
       );
     }
 
+    if(currentEpoch!==epoch.current)return;
+
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     const next = [...messages];
     if (question?.trim() || convertedImages.length > 0) {
@@ -219,27 +239,30 @@ export default function AskAIPage() {
     scrollBottom();
 
     try {
-      const primaryImage = convertedImages[0];
-      const data = await aiChat(
-        primaryImage?.base64,
-        primaryImage?.mediaType,
-        history,
-        (question || "").trim(),
-        language,
-        userLocation,
-        convertedImages
-      );
-      setMessages([...next, { role: "assistant", content: data.reply }]);
+      const fingerprint=JSON.stringify([question,history,convertedImages.map(img=>img.base64)]);
+      if(retry.current?.fingerprint!==fingerprint)retry.current={fingerprint,id:crypto.randomUUID()};
+      const data = await cliniqChat({
+        question: question.trim(), history, language,
+        location: locationOverride || userLocation,
+        images: convertedImages.map(({base64,mediaType})=>({base64,mediaType})),
+        requestId: retry.current.id,
+        conversationId:conversationId.current,selectedPatient,
+      },controller.current.signal);
+      if(currentEpoch!==epoch.current)return;
+      retry.current=null;
+      setMessages([...next, { role: "assistant", content: data.reply, agent: data, requestQuestion:question, requestFiles:attachedFiles }]);
       scrollBottom();
-    } catch {
-      setError("AI Assistant temporarily unavailable. Please try again.");
+    } catch (e) {
+      if(currentEpoch!==epoch.current||e.code==='ERR_CANCELED')return;
+      setError(e.response?.data?.error || "AI Assistant temporarily unavailable. Please try again.");
       setMessages(messages);
     } finally {
-      setLoading(false);
+      if(currentEpoch===epoch.current)setLoading(false);
     }
   }, [messages, language, userLocation]);
 
   const reset = () => {
+    epoch.current++; controller.current?.abort(); retry.current=null; conversationId.current=crypto.randomUUID(); setLoading(false);
     setMessages([]);
     setError(null);
     setLanguage("en");
@@ -308,6 +331,15 @@ export default function AskAIPage() {
               <span className="mc-cliniq-assistant-avatar" aria-hidden="true">Q</span>
               <div className="mc-cliniq-assistant-bubble">
                 {renderMarkdown(msg.content)}
+                <CliniqActions data={msg.agent} onSelect={(text,selected)=>handleChatSubmit(text,[],undefined,selected)} onLocation={()=>{
+                  const locationEpoch=epoch.current;
+                  if(!navigator.geolocation){setError('Location unavailable. Enter your city, or open Emergency to set pickup location.');return;}
+                  navigator.geolocation.getCurrentPosition(p=>{
+                    if(locationEpoch!==epoch.current)return;
+                    const location={latitude:p.coords.latitude,longitude:p.coords.longitude};
+                    setUserLocation(location);handleChatSubmit(msg.requestQuestion,msg.requestFiles||[],location);
+                  },()=>{if(locationEpoch===epoch.current)setError('Location permission denied. Enter your city, or set pickup in Emergency.');},{timeout:8000,maximumAge:0});
+                }}/>
               </div>
             </div>
           ))}

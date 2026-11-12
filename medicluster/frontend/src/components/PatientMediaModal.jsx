@@ -1,3 +1,4 @@
+import { PrivateImage, PrivateFileLink } from "./PrivateMedia";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   analyzePatientMedia,
@@ -217,24 +218,23 @@ export default function PatientMediaModal({ patientId, onClose }) {
                         onClick={() => { setLightbox(f.gridfs_id); setSelectedFile(f); }}
                         className="w-full aspect-square block"
                       >
-                        <img
-                          src={getMediaFileUrl(f.gridfs_id)}
+                        <PrivateImage
+                          source={getMediaFileUrl(f.gridfs_id)}
                           alt={f.original_name}
                           className="w-full h-full object-cover"
                         />
                       </button>
                     ) : (
-                      <a
-                        href={getMediaFileUrl(f.gridfs_id)}
-                        target="_blank"
-                        rel="noreferrer"
+                      <PrivateFileLink
+                        source={getMediaFileUrl(f.gridfs_id)}
+                        filename={f.original_name}
                         className="w-full aspect-square flex flex-col items-center justify-center gap-2"
                       >
                         <FileIcon />
                         <span className="text-xs text-blue-600 font-medium px-2 text-center leading-tight">
                           {f.original_name}
                         </span>
-                      </a>
+                      </PrivateFileLink>
                     )}
 
                     {/* Overlay */}
@@ -290,8 +290,8 @@ export default function PatientMediaModal({ patientId, onClose }) {
           className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-4"
           onClick={() => setLightbox(null)}
         >
-          <img
-            src={getMediaFileUrl(lightbox)}
+          <PrivateImage
+            source={getMediaFileUrl(lightbox)}
             alt="Preview"
             className="max-w-full max-h-full object-contain rounded"
             onClick={(e) => e.stopPropagation()}

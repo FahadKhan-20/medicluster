@@ -13,6 +13,20 @@ async function listen(t, app) {
 test('CliniQ chatbot routes queries through OmniRoute proxy with multimodal vision and text', async t => {
   await createTestDatabase(t);
 
+  let enrichmentCalls = 0;
+  t.mock.method(require('axios'), 'get', async () => {
+    enrichmentCalls++;
+    return { data: { city: 'Fixture city' } };
+  });
+  t.mock.method(require('../utils/ollamaClient'), 'chatText', async () => {
+    enrichmentCalls++;
+    return { reply: 'Fixture fallback reply', model: 'fixture' };
+  });
+  t.mock.method(require('child_process'), 'execFile', (_file, _args, callback) => {
+    enrichmentCalls++;
+    callback(null, '[]', '');
+  });
+
   const mockOmni = express();
   mockOmni.use(express.json({ limit: '20mb' }));
   let requestedModel = null;
@@ -25,7 +39,7 @@ test('CliniQ chatbot routes queries through OmniRoute proxy with multimodal visi
       choices: [
         {
           message: {
-            content: '### Clinical Impression\nMock Dermatitis\n\n### Recommended Specialist\nDermatology'
+            content: 'Mock Dermatitis. Please describe when the rash started.'
           }
         }
       ]
@@ -76,6 +90,7 @@ test('CliniQ chatbot routes queries through OmniRoute proxy with multimodal visi
     assert.match(data.reply, /Mock Dermatitis/);
     assert.equal(requestedModel, 'agy/gemini-3.8-flash-medium');
     assert.ok(receivedMessages.length >= 2);
+    assert.equal(enrichmentCalls, 0, 'Ordinary first replies must not wait for geolocation, another model call, or hospital search');
   }
 
   // 2. Vision multimodal image routing (Gemini 3.8 Flash)
@@ -127,6 +142,36 @@ test('CliniQ chatbot routes queries through OmniRoute proxy with multimodal visi
     assert.ok(Array.isArray(userTurn.content));
     const imageParts = userTurn.content.filter(part => part.type === 'image_url');
     assert.equal(imageParts.length, 2);
+  }
+
+  // Failed credentials apply to every model on this proxy: attempt it only once.
+  {
+    let failedAttempts = 0;
+    mockHandler = (_req, res) => {
+      failedAttempts++;
+      res.status(401).json({ error: { message: 'Fixture rejected credentials' } });
+    };
+    const res = await fetch(`${origin}/api/media/ai-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: 'Tell me about hydration', chatHistory: [] })
+    });
+    assert.equal(res.status, 200);
+    assert.equal(failedAttempts, 1);
+    assert.equal((await res.json()).reply, 'Fixture fallback reply');
+  }
+
+  // Hospital searches still run when explicitly requested.
+  {
+    mockHandler = (_req, res) => res.json({ choices: [{ message: { content: 'Ask a nearby clinic about this rash.' } }] });
+    const previousCalls = enrichmentCalls;
+    const res = await fetch(`${origin}/api/media/ai-chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: 'Find a nearby clinic', chatHistory: [] })
+    });
+    assert.equal(res.status, 200);
+    assert.equal(enrichmentCalls - previousCalls, 3);
   }
 
   // 3. Fallback path when OmniRoute returns 500 error

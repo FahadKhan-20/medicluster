@@ -56,6 +56,7 @@ app.use("/api/cluster", requireAuth, clusterRoutes);
 app.use("/api/alerts",  requireAuth, alertRoutes);
 app.use("/api/intelligence", require("./routes/intelligenceRoutes"));
 app.use("/api/media", mediaRoutes);
+app.use("/api/cliniq", require("./routes/cliniqRoutes"));
 app.use("/api/reminders", reminderRoutes);
 app.use("/api/dispatch", dispatchRoutes);
 app.use("/api/triage",  triageRoutes);

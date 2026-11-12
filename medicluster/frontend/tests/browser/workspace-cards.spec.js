@@ -144,7 +144,7 @@ test('long patient reports escape viewport clipping when printed', async ({ page
 test('CliniQ fills its workspace and keeps the composer visible through a long conversation', async ({ page }) => {
   await previewSession(page);
   const requests = [];
-  await page.route(url => url.pathname === '/api/media/ai-chat', route => {
+  await page.route(url => url.pathname === '/api/cliniq/chat', route => {
     requests.push(route.request().postDataJSON());
     return route.fulfill({ json: { reply: Array.from({ length: 50 }, (_, index) => `Demo response paragraph ${index}.`).join('\n\n') } });
   });

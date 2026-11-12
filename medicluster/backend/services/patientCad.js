@@ -16,7 +16,7 @@ async function track(row) {
   const incident = incidents[0];
   if (!incident) throw unavailable('Emergency request has not reached dispatch; retry your request');
   let ambulance = null; let hospital = null;
-  if (incident.assigned_ambulance_id) {
+  if (incident.assigned_ambulance_id && !['RESOLVED','CANCELLED','CLOSED','COMPLETED'].includes(incident.status)) {
     const rows = await query(`ambulances?id=eq.${encodeURIComponent(incident.assigned_ambulance_id)}&select=call_sign,latitude,longitude,last_ping&limit=1`);
     if (rows[0]) ambulance = { callSign: rows[0].call_sign, latitude: rows[0].latitude, longitude: rows[0].longitude, lastPing: rows[0].last_ping };
   }
