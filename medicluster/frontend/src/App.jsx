@@ -8,6 +8,8 @@ import { isPatientAndroid } from "./patient-app/patientPlatform";
 const DownloadPage = lazy(() => import("./pages/DownloadPage"));
 const PatientApp = lazy(() => import("./patient-app/PatientApp"));
 const ClinicalWorkspace = lazy(() => import("./ClinicalWorkspace"));
+const PharmacyPortal = lazy(() => import("./pharmacy/PharmacyPortal"));
+const CourierPortal = lazy(() => import("./pharmacy/CourierPortal"));
 
 export default function App() {
   return <Suspense fallback={<div className="min-h-screen bg-[#ffffff]" aria-label="Loading" aria-busy="true" />}><AppContent /></Suspense>;
@@ -23,6 +25,14 @@ function AppContent() {
 
   if (pathname === "/app" || pathname.startsWith("/app/")) {
     return <Routes><Route path="/app/*" element={<PatientApp />} /></Routes>;
+  }
+
+  if (pathname === "/pharmacy" || pathname.startsWith("/pharmacy/")) {
+    return <Routes><Route path="/pharmacy/*" element={<PharmacyPortal />} /></Routes>;
+  }
+
+  if (pathname === "/courier" || pathname.startsWith("/courier/")) {
+    return <Routes><Route path="/courier/*" element={<CourierPortal />} /></Routes>;
   }
 
   if (pathname === "/download" || (pathname === "/" && user === null)) return <DownloadPage />;

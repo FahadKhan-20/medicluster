@@ -6,7 +6,7 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 2 : 0,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3003',
     viewport: { width: 1440, height: 1000 },
     launchOptions: {
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
@@ -17,8 +17,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'npm run dev -- --host 127.0.0.1 --strictPort',
-      url: 'http://127.0.0.1:3000',
+      command: 'npm run dev -- --port 3003 --host 127.0.0.1 --strictPort',
+      url: 'http://127.0.0.1:3003',
       reuseExistingServer: !process.env.CI,
     },
     {

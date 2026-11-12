@@ -4,11 +4,13 @@ import { buildAppCatalog } from '../src/data/appCatalog.js';
 
 test('gives every role its own destination and patients and crews their own Android downloads', () => {
   const apps = buildAppCatalog('https://dispatch.example.com/');
-  assert.deepEqual(apps.map(a => a.id), ['medicluster', 'patient', 'dispatch', 'crew']);
+  assert.deepEqual(apps.map(a => a.id), ['medicluster', 'patient', 'dispatch', 'crew', 'pharmacy', 'courier']);
   assert.equal(apps[0].webHref, '/login');
   assert.equal(apps[1].webHref, '/app');
   assert.equal(apps[2].webHref, 'https://dispatch.example.com/#/login');
   assert.equal(apps[3].webHref, 'https://dispatch.example.com/#/driver/login');
+  assert.equal(apps[4].webHref, '/pharmacy');
+  assert.equal(apps[5].webHref, '/courier');
   assert.deepEqual(apps.filter(a => a.android).map(a => a.id), ['patient', 'crew']);
 });
 
