@@ -2,7 +2,26 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHmac, timingSafeEqual } = require('node:crypto');
+
+function verifyAgentToken(token, secret) {
+  if (!token || typeof token !== 'string' || !secret || secret.length < 32) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const hmac = createHmac('sha256', secret);
+    hmac.update(`${parts[0]}.${parts[1]}`);
+    const expected = hmac.digest('base64url');
+    if (parts[2].length !== expected.length) return null;
+    if (!timingSafeEqual(Buffer.from(parts[2]), Buffer.from(expected))) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    if (payload.exp && Date.now() >= payload.exp * 1000) return null;
+    if (payload.sub !== 'agent-core' || payload.kind !== 'agent') return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 const lifecycle = ['PENDING','ASSIGNED','EN_ROUTE_TO_SCENE','ON_SCENE','TRANSPORTING_TO_HOSPITAL','ARRIVED_AT_HOSPITAL','RESOLVED','CANCELLED'];
 const incidentFields = ['incident_type','severity','location_address','location_lat','location_lng','caller_name','caller_phone','patients_count','description','is_sos'];
@@ -12,6 +31,7 @@ function createApp(options = {}) {
   const app = express();
   const url = (options.url || process.env.SUPABASE_URL || '').replace(/\/$/, '');
   const key = options.key || process.env.SUPABASE_ANON_KEY;
+  const agentSecret = options.agentJwtSecret || process.env.AGENT_JWT_SECRET;
   let validUrl=false;
   try { const parsed=new URL(url); validUrl=!parsed.username && !parsed.password && !parsed.search && !parsed.hash && parsed.pathname==='/' && (parsed.protocol==='https:' || (parsed.protocol==='http:' && ['localhost','127.0.0.1','[::1]'].includes(parsed.hostname))); } catch {}
   app.use(helmet());
@@ -41,7 +61,18 @@ function createApp(options = {}) {
   app.use('/api', (req,res,next) => (async () => {
     const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || '');
     if (!match) throw fail(401,'Supabase access token required');
-    req.token=match[1];
+    const token = match[1];
+    if (agentSecret && agentSecret.length >= 32) {
+      const agent = verifyAgentToken(token, agentSecret);
+      if (agent) {
+        req.agent = true;
+        req.user = { id: 'agent-core' };
+        req.profile = { id: 'agent-core', role: 'DISPATCHER', email: 'agent@medicluster.local' };
+        req.token = options.serviceRoleKey || process.env.SUPABASE_SERVICE_ROLE_KEY || null;
+        return next();
+      }
+    }
+    req.token=token;
     const user = await upstream('/auth/v1/user',req.token);
     const profiles = await db(req,'profiles',eq(user.id));
     if (!profiles?.length || !['DISPATCHER','ADMIN','DRIVER'].includes(profiles[0].role)) throw fail(403,'An authorized Supabase profile is required');

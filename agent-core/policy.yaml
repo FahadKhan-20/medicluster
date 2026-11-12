@@ -2,4 +2,5 @@ threshold: 0.9
 groups:
   imaging: auto
   alerts: auto
+  dispatch: suggest
 rate_limit_per_minute: 30
