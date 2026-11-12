@@ -40,6 +40,8 @@ const AGENT_ROUTES = [
   { method: "POST", pattern: new RegExp(`^/api/media/analyze/${FILE_ID}$`) },
   { method: "POST", pattern: new RegExp(`^/api/media/review/${FILE_ID}$`) },
   { method: "POST", pattern: /^\/api\/alerts\/agent$/ },
+  { method: "POST", pattern: new RegExp(`^/api/reminders/${FILE_ID}/notify$`) },
+  { method: "POST", pattern: /^\/api\/reminders\/notify$/ },
 ];
 
 function agentSecret() {
