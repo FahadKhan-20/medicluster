@@ -5,6 +5,8 @@ import type { AgentState } from "../control/state.js";
 import type { AgentLoop } from "../agent/loop.js";
 import type { McStore } from "../store/mc.js";
 import { rowToEvent } from "../events/events.js";
+import type { CodeBlueEngine } from "../codeblue/session.js";
+import { handleCodeBlueRoute } from "../codeblue/routes.js";
 
 export interface ServerDeps {
   audit: Pick<Audit, "list">;
@@ -13,6 +15,7 @@ export interface ServerDeps {
   health: { isUp(name: string): boolean };
   store: Pick<McStore, "find">;
   adminKey: string;
+  codeblue?: CodeBlueEngine;
 }
 
 const MAX_BODY = 16 * 1024;
@@ -70,6 +73,10 @@ export function createServer(deps: ServerDeps): http.Server {
           intelligence: health.isUp("intelligence"),
         },
       });
+    }
+
+    if (deps.codeblue && (await handleCodeBlueRoute(req, res, deps.codeblue, adminKey, keyMatches))) {
+      return;
     }
 
     const known =

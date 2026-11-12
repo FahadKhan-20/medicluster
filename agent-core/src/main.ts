@@ -12,6 +12,7 @@ import { HealthPoller } from "./events/health.js";
 import { AgentLoop } from "./agent/loop.js";
 import { createServer } from "./api/server.js";
 import { trackInFlight } from "./lifecycle.js";
+import { CodeBlueEngine } from "./codeblue/session.js";
 
 const RETRY_INTERVAL_MS = 60_000;
 
@@ -50,7 +51,7 @@ async function main(): Promise<void> {
     subscribe: realtimeSubscribe(config.supabaseUrl, config.supabaseKey),
   });
 
-  const server = createServer({ audit, state, loop, health, store, adminKey: config.adminKey });
+  const server = createServer({ audit, state, loop, health, store, adminKey: config.adminKey, codeblue: new CodeBlueEngine({ jev, gate, audit, state, llm }) });
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   log(`listening on ${config.port}`);
 
