@@ -8,6 +8,7 @@ import {
 import { TIER_RANK, VITALS, adherence7d, flagReason, fmtVital, loadLatestRuns, runId, shortDate, vitalStatus } from "../data/clinical";
 import { Page, Tag, Segmented, linkCls } from "../components/ui";
 import { Pager, ScreenViews, usePageCapacity } from "../components/viewport-ui";
+import PrescribePanel from "./PrescribePanel";
 import "./records-viewport.css";
 
 const APPT_STATUS_TONES = {
@@ -311,6 +312,7 @@ function Profile({ patientId, patient }) {
         </div>} />
       </section> },
       { id: "history", label: "History", content: <section className="record-card"><h2>Clustering history</h2><RecordRows label="History pages" items={history} render={h => <Link className="record-history-link" to={`/results/${h.resultId}`}><strong>{h.risk_tier} risk · Cluster C{h.cluster_id}</strong><small>{shortDate(h.createdAt)} · {runId({ _id: h.resultId })}</small></Link>} /></section> },
+      { id: "prescribe", label: "Prescribe", content: <PrescribePanel patientId={patientId} /> },
       { id: "medicines", label: "Medicines", content: <section className="record-card"><div className="record-card-title"><h2>Medication schedules</h2><Link className={linkCls} to={`/reminders/${pid}`}>Manage</Link></div><RecordRows label="Medicine pages" items={reminders} render={r => <div><strong>{r.medicationName} {r.dosage}</strong><small>{r.times?.length ? `${r.times.length}× ` : ""}{r.frequency}{!r.active && " · paused"} · {adherence7d(r) == null ? "No doses due" : `${Math.round(adherence7d(r) * 100)}% taken (7 d)`}</small></div>} /></section> },
       { id: "files", label: "Files", content: <section className="record-card"><h2>Imaging & files</h2><RecordRows label="File pages" items={media} render={m => <a href={getMediaFileUrl(m.fileId)} target="_blank" rel="noreferrer"><strong>{m.filename}</strong><small>{shortDate(m.uploadedAt)} · Open file ↗</small></a>} /></section> },
       { id: "access", label: "Access", content: <section className="record-card record-access"><h2>Patient app access</h2><p>Link the mobile number the patient uses to sign in to the patient app.</p><AppSignIn key={patientId} patientId={patientId} /></section> },

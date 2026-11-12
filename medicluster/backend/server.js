@@ -25,7 +25,11 @@ const patientAppRoutes = require("./routes/patientAppRoutes");
 const authRoutes      = require("./routes/authRoutes");
 const alertRoutes     = require("./routes/alertRoutes");
 const patientAuthRoutes = require("./routes/patientAuthRoutes");
-const { requireAuth } = require("./middleware/auth");
+const { pharmacyAuth, courierAuth } = require("./routes/pharmacyAuthRoutes");
+const { prescriptions, pharmacies } = require("./routes/prescriptionRoutes");
+const pharmacyRoutes = require("./routes/pharmacyRoutes");
+const courierRoutes  = require("./routes/courierRoutes");
+const { requireAuth, requirePharmacist, requireCourier } = require("./middleware/auth");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,8 +53,15 @@ app.use(require('./routes/patientInstallerRoutes')(
 ));
 app.use("/api/auth",    authRoutes);
 app.use("/api/patient-auth", patientAuthRoutes);
+app.use("/api/pharmacy-auth", pharmacyAuth);
+app.use("/api/courier-auth", courierAuth);
+app.use("/api/pharmacy/agent", requireAuth, require("./routes/pharmacyAgentRoutes"));
+app.use("/api/pharmacy", requirePharmacist, pharmacyRoutes);
+app.use("/api/courier", requireCourier, courierRoutes);
 app.use("/api/sms-gateway", require('./routes/smsGatewayRoutes'));
 // Clinician-only data. Patient-app and dispatch endpoints stay unauthenticated.
+app.use("/api/prescriptions", requireAuth, prescriptions);
+app.use("/api/pharmacies",    requireAuth, pharmacies);
 app.use("/api/data",    requireAuth, dataRoutes);
 app.use("/api/cluster", requireAuth, clusterRoutes);
 app.use("/api/alerts",  requireAuth, alertRoutes);
@@ -65,6 +76,7 @@ app.use("/api/ml",      requireAuth, mlRoutes);
 app.use("/api/health",  healthRoutes);
 app.use("/api/settings", requireAuth, settingsRoutes);
 app.use("/api/agent",    require("./routes/agentRoutes"));
+app.use("/api/patient-app", require("./routes/patientPharmacyRoutes"));
 app.use("/api/patient-app", require("./routes/patientFeatureRoutes"));
 app.use("/api/patient-app", patientAppRoutes);
 

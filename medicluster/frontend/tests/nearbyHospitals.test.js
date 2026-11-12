@@ -72,3 +72,19 @@ test('an invalid successful response fails over but a valid empty result does no
   assert.deepEqual(await fetchNearbyHospitals(centre, 5), []);
   assert.equal(calls, 1);
 });
+
+test('when every Overpass instance blocks us, Photon results are used and filtered by radius', async (t) => {
+  const urls = [];
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    urls.push(String(url));
+    if (String(url).includes('photon.komoot.io')) return Response.json({ features: [
+      { geometry: { coordinates: [77.591, 12.971] }, properties: { osm_type: 'N', osm_id: 7, name: 'Photon Hospital', osm_value: 'hospital', street: 'MG Road' } },
+      { geometry: { coordinates: [78.5, 13.9] }, properties: { osm_type: 'N', osm_id: 8, name: 'Too far', osm_value: 'hospital' } },
+    ] });
+    return new Response('', { status: 406 });
+  });
+  const hospitals = await fetchNearbyHospitals(centre, 5);
+  assert.deepEqual(hospitals.map(h => h.name), ['Photon Hospital']);
+  assert.equal(hospitals[0].isHospital, true);
+  assert.ok(urls.at(-1).includes('osm_tag=amenity%3Ahospital'));
+});

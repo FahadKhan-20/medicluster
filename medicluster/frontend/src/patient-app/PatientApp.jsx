@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
-import { House, MessageCircle, HeartPulse, CalendarDays, FileText } from "lucide-react";
+import { House, MessageCircle, HeartPulse, CalendarDays, FileText, Pill } from "lucide-react";
 import {
   listReminders, markDoseTaken, getPatientProfile, updatePatientProfile, listReadings,
   getPatientToken, setPatientToken, logReading,
@@ -14,6 +14,7 @@ import VisitsScreen from "./screens/VisitsScreen";
 import EmergencyScreen from "./screens/EmergencyScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import ReportsScreen from "./screens/ReportsScreen";
+import PharmacyScreen from "./screens/PharmacyScreen";
 import { savePatientSnapshot, readPatientSnapshot, clearPatientOffline, enqueuePatientMutation, flushPatientMutations, registerPatientServiceWorker } from "./offline";
 import { usePatientOfflineStatus } from "./offlineStatus";
 import { syncNativeReminders, clearNativeReminders, requestNativeReminderPermission, getNativeReminderStatus, subscribeNativeReminderStatus } from "./nativeReminders";
@@ -238,6 +239,7 @@ function AppRoutes() {
       <Route path="health" element={<HealthScreen />} />
       <Route path="health/log" element={<LogReadingScreen />} />
       <Route path="visits" element={<VisitsScreen />} />
+      <Route path="pharmacy" element={<PharmacyScreen />} />
       <Route path="reports" element={<ReportsScreen />} />
       <Route path="emergency" element={<EmergencyScreen />} />
       <Route path="profile" element={<ProfileScreen />} />
@@ -276,6 +278,7 @@ function StatusBar() {
 const TABS = [
   { to: "/app", label: "Today", end: true, icon: House },
   { to: "/app/visits", label: "Care", icon: CalendarDays },
+  { to: "/app/pharmacy", label: "Pharmacy", icon: Pill },
   { to: "/app/health", label: "My health", icon: HeartPulse },
   { to: "/app/reports", label: "Reports", icon: FileText },
   { to: "/app/cliniq", label: "CliniQ", icon: MessageCircle },

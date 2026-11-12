@@ -12,6 +12,7 @@ import { EventSource, realtimeSubscribe, type Event } from "./events/events.js";
 import { HealthPoller } from "./events/health.js";
 import { AgentLoop } from "./agent/loop.js";
 import { registerRemindersWorkflow } from "./workflows/reminders.js";
+import { registerPharmacyWorkflow } from "./workflows/pharmacy.js";
 import { registerSelfheal } from "./selfheal/index.js";
 import { createDispatchWorkflow } from "./workflows/dispatch.js";
 import { BuilderService } from "./builder/builder.js";
@@ -43,7 +44,7 @@ async function main(): Promise<void> {
     baseUrl: dispatchUrl,
     token: () => signAgentToken(config.agentJwtSecret),
   });
-  const jev = new JevClient({ apiKey: config.openrouterKey, model: config.jevModel });
+  const jev = new JevClient({ apiKey: config.openrouterKey, fallbackKeys: config.openrouterFallbackKeys, model: config.jevModel });
   const llm = new OmniRouteProvider({ url: config.omnirouteUrl, apiKey: config.omnirouteKey, model: config.agentModel });
   const health = new HealthPoller({
     targets: {
@@ -55,6 +56,7 @@ async function main(): Promise<void> {
   });
   const loop = new AgentLoop({ jev, llm, audit, state, gate, backend, health, store });
   const reminders = registerRemindersWorkflow({ jev, llm, audit, state, gate, backend, store, health });
+  const pharmacyWorkflow = registerPharmacyWorkflow({ jev, llm, audit, state, gate, backend, store, health });
   const dispatchWorkflow = createDispatchWorkflow({
     jev,
     llm,
@@ -87,6 +89,7 @@ async function main(): Promise<void> {
       loop.retryPending().catch((err) => console.error("[agent-core] loop retryPending failed", err)),
       selfheal.retryPending().catch((err) => console.error("[agent-core] selfheal retryPending failed", err)),
       dispatchWorkflow.retryPending().catch((err) => console.error("[agent-core] retryPending dispatch failed", err)),
+      pharmacyWorkflow.retryPending().catch((err) => console.error("[agent-core] retryPending pharmacy failed", err)),
     ]),
   );
   const handle = work.wrap((e: Event) => loop.handle(e).then(() => undefined));
@@ -150,6 +153,7 @@ async function main(): Promise<void> {
     setTimeout(() => process.exit(0), 10_000).unref();
     events.stop();
     health.stop();
+    pharmacyWorkflow.stopPeriodic();
     clearInterval(retryTimer);
     clearInterval(dispatchPollTimer);
     policyStore.close();

@@ -23,6 +23,7 @@ async function createTestDatabase(t) {
   const sql = new PGlite();
   await sql.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;');
   await sql.exec(await readFile(path.join(__dirname, '../../supabase/migrations/20261018_medicluster_storage.sql'), 'utf8'));
+  await sql.exec(await readFile(path.join(__dirname, '../../supabase/migrations/20261111_pharmacy.sql'), 'utf8'));
   const invoke = async (name, args = {}) => {
     const keys = rpcParameters[name].filter(key => Object.hasOwn(args, key));
     const params = keys.map(key => typeof args[key] === 'object' && args[key] !== null ? JSON.stringify(args[key]) : args[key]);

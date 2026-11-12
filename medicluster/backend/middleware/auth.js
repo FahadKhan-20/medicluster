@@ -33,6 +33,11 @@ function signPatientToken(patientId) {
   return jwt.sign({ sub: patientId, kind: "patient" }, secret(), { expiresIn: PATIENT_TOKEN_TTL });
 }
 
+function signStaffToken(staff) {
+  const kind = staff.role === "courier" ? "courier" : "pharmacy";
+  return jwt.sign({ sub: String(staff._id || staff.id), kind }, secret(), { expiresIn: TOKEN_TTL });
+}
+
 const AGENT_SUBJECT = "agent-core";
 const FILE_ID = "[a-zA-Z0-9_-]{1,128}";
 
@@ -49,6 +54,9 @@ const AGENT_ROUTES = [
   { method: "POST", pattern: /^\/api\/ml\/sepsis\/score$/ },
   { method: "GET", pattern: new RegExp(`^/api/ml/readings/${FILE_ID}$`) },
   { method: "POST", pattern: /^\/api\/intelligence\/rhythm\/classify$/ },
+  { method: "GET", pattern: /^\/api\/pharmacy\/agent\/stock-low$/ },
+  { method: "GET", pattern: /^\/api\/pharmacy\/agent\/stuck-orders$/ },
+  { method: "POST", pattern: /^\/api\/pharmacy\/agent\/refill-suggestion$/ },
 ];
 
 function agentSecret() {
@@ -76,7 +84,9 @@ function readSession(req) {
     const p = jwt.verify(token, key);
     // Agent identity only exists under AGENT_JWT_SECRET; never honour it under the user secret.
     if (p.kind === "agent") return null;
-    return p.kind === "patient" ? { kind: "patient", patientId: p.sub } : { kind: "clinician", userId: p.sub, role: p.role };
+    if (p.kind === "patient") return { kind: "patient", patientId: p.sub };
+    if (p.kind === "pharmacy" || p.kind === "courier") return { kind: p.kind, staffId: p.sub };
+    return { kind: "clinician", userId: p.sub, role: p.role };
   } catch {
     // fall through to the agent secret
   }
@@ -153,14 +163,63 @@ async function requirePatientOrClinician(req, res, next) {
   let session;
   try { session = readSession(req); } catch (err) { return next(err); }
   if (!session) return res.status(401).json({ error: "Sign in required" });
+  if (session.kind === "agent") return res.status(403).json({ error: "Agent access not permitted for this route" });
+  if (session.kind !== "clinician" && session.kind !== "patient") {
+    return res.status(403).json({ error: "Clinician or patient sign-in required" });
+  }
   try {
     if (session.kind === 'clinician' && !await allowedClinicianSession(session)) {
       return res.status(403).json({ error: "This account isn't enabled for clinician access" });
     }
   } catch (err) { return next(err); }
-  if (session.kind === "agent") return res.status(403).json({ error: "Agent access not permitted for this route" });
   req.session = session;
   return next();
+}
+
+async function requirePharmacist(req, res, next) {
+  let session;
+  try { session = readSession(req); } catch (err) { return next(err); }
+  if (!session) return res.status(401).json({ error: "Sign in required" });
+  if (session.kind !== "pharmacy") return res.status(403).json({ error: "Pharmacist sign-in required" });
+  try {
+    const PharmacyStaff = require("../models/PharmacyStaff");
+    const staff = await PharmacyStaff.findById(session.staffId).lean();
+    if (!staff || !staff.active || staff.role !== "pharmacist") {
+      return res.status(403).json({ error: "Pharmacist account inactive or not found" });
+    }
+    req.staff = {
+      id: String(staff._id),
+      name: staff.name,
+      role: staff.role,
+      pharmacyIds: Array.isArray(staff.pharmacyIds) ? staff.pharmacyIds.map(String) : [],
+    };
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function requireCourier(req, res, next) {
+  let session;
+  try { session = readSession(req); } catch (err) { return next(err); }
+  if (!session) return res.status(401).json({ error: "Sign in required" });
+  if (session.kind !== "courier") return res.status(403).json({ error: "Courier sign-in required" });
+  try {
+    const PharmacyStaff = require("../models/PharmacyStaff");
+    const staff = await PharmacyStaff.findById(session.staffId).lean();
+    if (!staff || !staff.active || staff.role !== "courier") {
+      return res.status(403).json({ error: "Courier account inactive or not found" });
+    }
+    req.staff = {
+      id: String(staff._id),
+      name: staff.name,
+      role: staff.role,
+      pharmacyIds: Array.isArray(staff.pharmacyIds) ? staff.pharmacyIds.map(String) : [],
+    };
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 }
 
 async function allowedClinicianSession(session) {
@@ -172,4 +231,16 @@ async function allowedClinicianSession(session) {
 const canAccessPatient = (req, patientId) =>
   req.session?.kind === "clinician" || (req.session?.kind === "patient" && req.session.patientId === patientId);
 
-module.exports = { signToken, signPatientToken, signAgentToken, AGENT_ROUTES, requireAuth, requireRole, requirePatientOrClinician, canAccessPatient };
+module.exports = {
+  signToken,
+  signPatientToken,
+  signStaffToken,
+  signAgentToken,
+  AGENT_ROUTES,
+  requireAuth,
+  requireRole,
+  requirePatientOrClinician,
+  requirePharmacist,
+  requireCourier,
+  canAccessPatient,
+};
