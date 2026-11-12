@@ -136,6 +136,24 @@ const createIncidentDomElement = (inc) => {
 };
 const createHospitalDomElement = (h) => markerElement('maplibre-hospital-wrapper', hospitalMarkerHtml(h));
 
+function getAmbulancePopupHtml(amb) {
+  const ms = amb.last_ping ? Date.now() - new Date(amb.last_ping).getTime() : null;
+  const sec = ms != null ? Math.max(0, Math.floor(ms / 1000)) : null;
+  const stale = sec == null || sec > 60;
+  const pingText = sec != null ? `Last ping: ${sec}s ago` : 'No GPS ping received';
+  return `
+    <div style="font-family:'Inter',sans-serif;padding:6px 8px;min-width:180px;">
+      <div style="font-weight:800;font-size:13px;color:#0F172A;">${amb.call_sign || amb.vehicle_number || amb.id}</div>
+      <div style="font-size:11px;color:#475569;margin-bottom:4px;">Driver: ${amb.driver || 'Active Paramedic'}</div>
+      <div style="font-size:11px;font-weight:700;color:#2563EB;">Status: ${amb.status} (Speed: ${amb.speed || 0} km/h)</div>
+      <div style="font-size:11px;margin-top:4px;display:flex;align-items:center;gap:6px;color:${stale ? '#DC2626' : '#475569'};">
+        <span>${pingText}</span>
+        ${stale ? '<span style="font-size:9.5px;font-weight:700;padding:1px 4px;border-radius:3px;background:rgba(220,38,38,0.12);color:#DC2626;border:1px solid rgba(220,38,38,0.3);">STALE &gt;60s</span>' : ''}
+      </div>
+    </div>
+  `;
+}
+
 export default function DispatchMap({
   incidents = [],
   ambulances = [],
@@ -366,6 +384,9 @@ export default function DispatchMap({
       if (existing) {
         existing.setLngLat(lngLat);
         redrawMarker(existing, ambulanceMarkerKey(amb), ambulanceMarkerHtml(amb));
+        if (existing.getPopup()) {
+          existing.getPopup().setHTML(getAmbulancePopupHtml(amb));
+        }
       } else {
         const el = createAmbulanceDomElement(amb);
         el.addEventListener('click', () => {
@@ -375,13 +396,7 @@ export default function DispatchMap({
         });
 
         const popup = new maplibregl.Popup({ offset: [0, -45], closeButton: true, className: 'google-maplibre-popup' })
-          .setHTML(`
-            <div style="font-family:'Inter',sans-serif;padding:6px 8px;min-width:180px;">
-              <div style="font-weight:800;font-size:13px;color:#0F172A;">${amb.call_sign || amb.vehicle_number}</div>
-              <div style="font-size:11px;color:#475569;margin-bottom:4px;">Driver: ${amb.driver || 'Active Paramedic'}</div>
-              <div style="font-size:11px;font-weight:700;color:#2563EB;">Status: ${amb.status} (Speed: ${amb.speed || 0} km/h)</div>
-            </div>
-          `);
+          .setHTML(getAmbulancePopupHtml(amb));
 
         const marker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
           .setLngLat(lngLat)

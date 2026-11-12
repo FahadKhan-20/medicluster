@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import supabase from '../services/supabase';
 import { dispatchBroadcast, DISPATCH_EVENTS } from '../services/dispatchBroadcast';
 import DriverMap from '../components/DriverMap';
+import { STATUS_LABELS as SHARED_STATUS_LABELS } from '../services/statusLabels';
 import PatientVitalsForm from '../components/PatientVitalsForm';
 import HospitalSelector from '../components/HospitalSelector';
 import MedicalChecklist from '../components/MedicalChecklist';
@@ -51,13 +52,8 @@ const STATUS_FLOW = [
 ];
 
 const STATUS_LABELS = {
-  ASSIGNED: 'Assigned',
-  EN_ROUTE_TO_SCENE: 'En Route',
-  ON_SCENE: 'On Scene',
+  ...SHARED_STATUS_LABELS,
   TRANSPORTING_TO_HOSPITAL: 'Transport',
-  ARRIVED_AT_HOSPITAL: 'At Hospital',
-  RETURNING_TO_BASE: 'Returning',
-  AVAILABLE: 'Available',
 };
 
 const STATUS_ACTIONS = {
@@ -258,9 +254,10 @@ export default function DriverInterface() {
 
         console.log('[Driver GPS] Live Device GPS ping received:', coords, 'Accuracy:', Math.round(pos.coords.accuracy), 'm');
 
+        const currentAmbId = assignedAmbulance?.id || localStorage.getItem('medicluster.driver.vehicle') || 'AMB-007';
         // Push live GPS update to backend / broadcast
         dispatchBroadcast.send(DISPATCH_EVENTS.AMBULANCE_LOCATION, {
-          ambulance_id: 'AMB-001',
+          ambulance_id: currentAmbId,
           latitude: coords.lat,
           longitude: coords.lng,
           speed: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 45,
@@ -355,9 +352,10 @@ export default function DriverInterface() {
           etaMins: Math.max(1, Math.ceil((prev.etaMins || 6) * fraction)),
         }));
 
+        const currentAmbId = assignedAmbulance?.id || localStorage.getItem('medicluster.driver.vehicle') || 'AMB-007';
         // Broadcast live location to Dispatch Command Center & other responders
         dispatchBroadcast.send(DISPATCH_EVENTS.AMBULANCE_LOCATION, {
-          ambulance_id: 'AMB-001',
+          ambulance_id: currentAmbId,
           latitude: next.lat,
           longitude: next.lng,
           speed: 52,
@@ -416,6 +414,50 @@ export default function DriverInterface() {
       dispatchBroadcast.off(DISPATCH_EVENTS.INCIDENT_ASSIGNED, handleAssigned);
     };
   }, []);
+
+  // ── Authoritative DB Mission State Sync ──
+  const syncMissionFromDB = useCallback(async () => {
+    const ambId = assignedAmbulance?.id || localStorage.getItem('medicluster.driver.vehicle') || 'AMB-007';
+    if (!ambId) return;
+
+    try {
+      const { data: amb } = await supabase.from('ambulances').select('*').eq('id', ambId).maybeSingle();
+      if (!amb) return;
+
+      if (amb.assigned_incident_id) {
+        const { data: inc } = await supabase.from('incidents').select('*').eq('id', amb.assigned_incident_id).maybeSingle();
+        if (inc && !['RESOLVED', 'CANCELLED', 'CLOSED'].includes(inc.status)) {
+          setActiveIncident(inc);
+          setMissionStatus(amb.status || inc.status || 'ASSIGNED');
+          return;
+        }
+      }
+
+      if (['AVAILABLE', 'STANDBY'].includes(amb.status) || !amb.assigned_incident_id) {
+        setActiveIncident(null);
+        setMissionStatus('AVAILABLE');
+      }
+    } catch (err) {
+      console.warn('[DriverInterface] DB sync error:', err);
+    }
+  }, [assignedAmbulance?.id]);
+
+  useEffect(() => {
+    syncMissionFromDB();
+    const ambId = assignedAmbulance?.id || localStorage.getItem('medicluster.driver.vehicle') || 'AMB-007';
+    const channel = supabase.channel(`driver_interface_${ambId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ambulances', filter: `id=eq.${ambId}` }, syncMissionFromDB)
+      .subscribe();
+
+    window.addEventListener('focus', syncMissionFromDB);
+    window.addEventListener('online', syncMissionFromDB);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('focus', syncMissionFromDB);
+      window.removeEventListener('online', syncMissionFromDB);
+    };
+  }, [syncMissionFromDB, assignedAmbulance?.id]);
 
   const handleAccept = async () => {
     setActiveIncident(alertIncident);

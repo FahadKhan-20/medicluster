@@ -116,9 +116,11 @@ export function useAmbulances() {
       .on('broadcast', { event: 'ambulance_location' }, (payload) => {
         const data = payload.payload;
         if (!data) return;
+        const targetId = data.ambulance_id || data.id;
+        if (!targetId) return;
         setAmbulances(prev => prev.map(a =>
-          a.id === data.ambulance_id
-            ? { ...a, latitude: data.latitude, longitude: data.longitude, speed: data.speed, heading: data.heading }
+          a.id === targetId
+            ? { ...a, latitude: data.latitude, longitude: data.longitude, speed: data.speed ?? a.speed, heading: data.heading ?? a.heading, last_ping: data.last_ping || a.last_ping }
             : a
         ));
       })
@@ -128,9 +130,10 @@ export function useAmbulances() {
     const handleBroadcastLocation = (data) => {
       if (!data) return;
       const targetId = data.ambulance_id || data.id;
+      if (!targetId) return;
       setAmbulances(prev => prev.map(a =>
-        a.id === targetId || a.call_sign === 'Alpha-1' || a.id === 'AMB-001'
-          ? { ...a, latitude: data.latitude, longitude: data.longitude, speed: data.speed || a.speed }
+        a.id === targetId
+          ? { ...a, latitude: data.latitude, longitude: data.longitude, speed: data.speed ?? a.speed, heading: data.heading ?? a.heading, last_ping: data.last_ping || a.last_ping }
           : a
       ));
     };
