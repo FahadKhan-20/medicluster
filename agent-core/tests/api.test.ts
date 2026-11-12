@@ -57,6 +57,14 @@ const post = (path: string, body?: string, headers: Record<string, string> = adm
   fetch(base + path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body });
 
 describe("api", () => {
+  it("console is public html", async () => {
+    const res = await fetch(`${base}/console`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const text = await res.text();
+    expect(text).toContain("MediCluster Agent Command Center");
+  });
+
   it("health is public", async () => {
     const res = await fetch(`${base}/health`);
     expect(res.status).toBe(200);

@@ -5,6 +5,7 @@ import type { AgentState } from "../control/state.js";
 import type { AgentLoop } from "../agent/loop.js";
 import type { McStore } from "../store/mc.js";
 import { rowToEvent } from "../events/events.js";
+import { getConsoleHtml } from "../console/index.js";
 
 export interface ServerDeps {
   audit: Pick<Audit, "list">;
@@ -28,6 +29,11 @@ function send(res: http.ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body);
   res.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(text) });
   res.end(text);
+}
+
+function sendHtml(res: http.ServerResponse, status: number, html: string): void {
+  res.writeHead(status, { "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(html) });
+  res.end(html);
 }
 
 function keyMatches(given: string | string[] | undefined, expected: string): boolean {
@@ -70,6 +76,10 @@ export function createServer(deps: ServerDeps): http.Server {
           intelligence: health.isUp("intelligence"),
         },
       });
+    }
+
+    if (method === "GET" && (path === "/console" || path === "/console/" || path === "/console/index.html")) {
+      return sendHtml(res, 200, getConsoleHtml());
     }
 
     const known =
