@@ -62,9 +62,30 @@ export interface AgentLoopDeps {
 /** `queued` marks that this run put the event (back) on the retry queue. */
 type Ctx = { event: Event; doc: any; auditId: string; queued: boolean };
 type Result = { outcome: Outcome; reason?: string };
+type Stage = "uploaded" | "analyzed";
+
+/** Actions that may execute at each stage; anything else goes to review. */
+const STAGE_ACTIONS: Record<Stage, string[]> = { uploaded: ["analyze"], analyzed: ["alert", "request_review"] };
+
+/** The only part of the alert schema Gemini fills; everything else is code-owned. */
+const ALERT_TEXT_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", minLength: 1, maxLength: 200 },
+    summary: { type: "string", minLength: 1, maxLength: 2000 },
+  },
+  required: ["title", "summary"],
+  additionalProperties: false,
+};
+const NO_ARGS_SCHEMA = { type: "object", properties: {}, required: [], additionalProperties: false };
+
+const nonEmpty = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 
 export class AgentLoop {
   private readonly d: AgentLoopDeps;
+  /** Idempotency keys whose write is in progress in this process. */
+  private readonly inFlight = new Set<string>();
+  private retrying?: Promise<number>;
 
   constructor(deps: AgentLoopDeps) {
     this.d = deps;
@@ -76,9 +97,16 @@ export class AgentLoop {
 
   /**
    * Re-handle queued events and ack every one that was not queued again (pending, or blocked
-   * by the kill switch). Returns how many were handled.
+   * by the kill switch). Returns how many were handled. Overlapping calls share one run.
    */
-  async retryPending(): Promise<number> {
+  retryPending(): Promise<number> {
+    this.retrying ??= this.drainQueue().finally(() => {
+      this.retrying = undefined;
+    });
+    return this.retrying;
+  }
+
+  private async drainQueue(): Promise<number> {
     if (await this.d.state.isStopped()) return 0;
     const events = await this.d.state.drain();
     for (const e of events) {
@@ -124,14 +152,17 @@ export class AgentLoop {
       return { outcome: "pending", reason: "analysis_unavailable" };
     }
 
-    const facts = await this.llmJson(STATE_PROMPT, JSON.stringify(doc), isObject);
-    if (!facts.ok) {
-      await this.step(c, "state", { error: facts.error });
+    const gemini = await this.llmJson(STATE_PROMPT, JSON.stringify(doc), isObject);
+    if (!gemini.ok) {
+      await this.step(c, "state", { error: gemini.error });
       return { outcome: "pending", reason: "llm_unavailable" };
     }
-    await this.step(c, "state", facts.value);
+    // Code-owned facts override any Gemini field of the same name.
+    const stage: Stage = event.type === "scan.uploaded" ? "uploaded" : "analyzed";
+    const facts = { ...gemini.value, stage, has_analysis: isObject(doc.analysis) && !!doc.analysis.analyzedAt };
+    await this.step(c, "state", facts);
 
-    const decision = await this.d.jev.decide(facts.value, JEV_QUESTIONS, "imaging");
+    const decision = await this.d.jev.decide(facts, JEV_QUESTIONS, "imaging");
     const { answers } = decision;
     const action = answers.action?.choice ?? "";
     const actionProb = answers.action?.probabilities?.[action] ?? 0;
@@ -144,15 +175,16 @@ export class AgentLoop {
 
     const key = `${event.id}:${action}`;
     const stopped = await this.d.state.isStopped();
+    const done = await this.d.state.isDone(key);
     const verdict = this.d.gate.check({
       group: tool.group,
       action,
       actionProb,
       actNow,
-      fallback: decision.fallback,
+      fallback: decision.fallback || !!decision.error,
       stopped,
       key,
-      done: await this.d.state.isDone(key),
+      done: done || this.inFlight.has(key),
     });
     await this.step(c, "gate", { key, ...verdict });
 
@@ -161,30 +193,52 @@ export class AgentLoop {
       return { outcome: "blocked", reason: verdict.reason };
     }
     if (verdict.verdict === "review") return this.review(c, verdict.reason);
-    return this.execute(c, tool, key, answers, facts.value);
+    if (!STAGE_ACTIONS[stage].includes(action)) return this.review(c, "stage_not_allowed");
+    // Claim the key before the next await so a concurrent run sees it as a duplicate.
+    if (this.inFlight.has(key)) return { outcome: "blocked", reason: "duplicate" };
+    this.inFlight.add(key);
+    try {
+      return await this.execute(c, tool, key, answers, facts);
+    } finally {
+      this.inFlight.delete(key);
+    }
   }
 
-  /** Review on upload is audit-only; on an analysed scan, ask for a clinician review once. */
+  /** Review on upload is audit-only; on an analysed scan, ask for a clinician review once, if policy allows. */
   private async review(c: Ctx, reason: string): Promise<Result> {
     if (c.event.type !== "scan.analyzed") return { outcome: "review", reason };
     const tool = toolForAction(REVIEW_TOOL)!;
     const key = `${c.event.id}:${REVIEW_TOOL}`;
-    if (await this.d.state.isDone(key)) return { outcome: "review", reason };
-    const result = await tool.run({ fileId: c.doc.gridfs_id }, this.d.backend as BackendClient);
-    await this.step(c, "tool", { tool: tool.name, key, result });
-    if (!result.ok) return { outcome: "failed", reason: "backend_error" };
-    this.d.gate.record(tool.group);
-    await this.d.state.markDone(key);
-    return { outcome: "review", reason };
+    const done = await this.d.state.isDone(key);
+    const verdict = this.d.gate.check({
+      group: tool.group,
+      action: tool.action,
+      actionProb: 1,
+      actNow: 1,
+      fallback: false,
+      stopped: false,
+      key,
+      done: done || this.inFlight.has(key),
+    });
+    await this.step(c, "review_gate", { key, ...verdict });
+    if (verdict.verdict === "blocked") return { outcome: "review", reason };
+    this.inFlight.add(key);
+    try {
+      const r = await this.runTool(c, tool, key, { fileId: c.doc.gridfs_id });
+      return r.outcome === "executed" ? { outcome: "review", reason } : r;
+    } finally {
+      this.inFlight.delete(key);
+    }
   }
 
   private async execute(c: Ctx, tool: Tool, key: string, answers: Record<string, Answer>, facts: object): Promise<Result> {
     const urgencyIdx = Math.min(2, Math.max(0, Math.round(answers.urgency?.score ?? 0)));
+    const isAlert = tool.action === "alert";
     const filled = await this.llmJson(
       ARGS_PROMPT,
       JSON.stringify({
         action: tool.action,
-        tool: { name: tool.name, schema: tool.schema },
+        tool: { name: tool.name, schema: isAlert ? ALERT_TEXT_SCHEMA : NO_ARGS_SCHEMA },
         state: facts,
         urgency: URGENCY[urgencyIdx],
       }),
@@ -198,35 +252,45 @@ export class AgentLoop {
     await this.step(c, "args", filled.value);
     if (filled.value.tool !== tool.name) return { outcome: "failed", reason: "llm_tool_mismatch" };
 
-    const llmArgs = filled.value.arguments;
-    let args: Record<string, unknown>;
-    if (tool.action === "alert") {
-      // Code owns identity and safety fields; the LLM supplies only the text.
-      args = {
-        patient_id: c.doc.patient_id == null ? undefined : String(c.doc.patient_id),
-        source_id: c.event.mediaId,
-        severity: SEVERITY[urgencyIdx],
-        title: typeof llmArgs.title === "string" ? llmArgs.title.slice(0, 200) : llmArgs.title,
-        summary: typeof llmArgs.summary === "string" ? llmArgs.summary.slice(0, 2000) : llmArgs.summary,
-        jev_probabilities: {
-          action: answers.action?.probabilities,
-          urgency: answers.urgency?.probabilities,
-          act_now: answers.act_now?.noul,
-        },
-        audit_id: c.auditId,
-      };
-    } else {
-      args = { fileId: c.doc.gridfs_id };
-      if (tool.action === "analyze" && llmArgs.model_name !== undefined) args.model_name = llmArgs.model_name;
-    }
+    if (!isAlert) return this.runTool(c, tool, key, { fileId: c.doc.gridfs_id });
+    const { title, summary } = filled.value.arguments;
+    if (!nonEmpty(title) || !nonEmpty(summary)) return { outcome: "pending", reason: "llm_invalid_text" };
+    // Code owns identity and safety fields; the LLM supplies only the text.
+    return this.runTool(c, tool, key, {
+      patient_id: c.doc.patient_id == null ? undefined : String(c.doc.patient_id),
+      source_id: c.event.mediaId,
+      severity: SEVERITY[urgencyIdx],
+      title: title.slice(0, 200),
+      summary: summary.slice(0, 2000),
+      jev_probabilities: {
+        action: answers.action?.probabilities,
+        urgency: answers.urgency?.probabilities,
+        act_now: answers.act_now?.noul,
+      },
+      audit_id: c.auditId,
+    });
+  }
+
+  /** The single write path: validate, re-check the kill switch, call, classify, mark done. */
+  private async runTool(c: Ctx, tool: Tool, key: string, args: Record<string, unknown>): Promise<Result> {
     const errors = validateArgs(tool, args);
     if (errors.length) {
-      await this.step(c, "tool", { tool: tool.name, errors });
+      await this.step(c, "tool", { tool: tool.name, key, errors });
       return { outcome: "failed", reason: "invalid_args" };
+    }
+    if (await this.d.state.isStopped()) {
+      await this.enqueue(c);
+      return { outcome: "blocked", reason: "stopped" };
     }
     const result = await tool.run(args, this.d.backend as BackendClient);
     await this.step(c, "tool", { tool: tool.name, key, args, result });
-    if (!result.ok) return { outcome: "failed", reason: "backend_error" };
+    if (!result.ok) {
+      const clientError = result.status >= 400 && result.status < 500;
+      const invalid = result.status === 0 && result.error.startsWith("invalid arguments");
+      return clientError || invalid
+        ? { outcome: "failed", reason: "backend_error" }
+        : { outcome: "pending", reason: "backend_unavailable" };
+    }
     this.d.gate.record(tool.group);
     await this.d.state.markDone(key);
     return { outcome: "executed", reason: "ok" };
