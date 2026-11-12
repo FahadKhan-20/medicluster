@@ -33,23 +33,30 @@ export class AgentState {
     await this.set({ cursor: iso });
   }
 
+  /** Each queued event is its own doc, so re-enqueueing the same id keeps one doc. */
   async enqueue(event: QueuedEvent): Promise<void> {
-    await this.store.upsert(COLLECTION, { _id: ID }, { $push: { queue: event } });
+    await this.store.upsert(
+      COLLECTION,
+      { _id: `queue:${event.id}` },
+      { $set: { event, status: "queued", queuedAt: new Date().toISOString() } },
+    );
   }
 
-  /** Returns queued events and clears the queue. */
+  /** Returns queued events (oldest first) without removing them; call ack() when handled. */
   async drain(): Promise<QueuedEvent[]> {
-    const queue: QueuedEvent[] = (await this.doc()).queue ?? [];
-    if (queue.length === 0) return [];
-    await this.set({ queue: [] });
-    return queue;
+    const docs = await this.store.find(COLLECTION, { status: "queued" }, { queuedAt: 1 }, 200);
+    return docs.map((d) => d.event as QueuedEvent);
+  }
+
+  async ack(eventId: string): Promise<void> {
+    await this.store.update(COLLECTION, { _id: `queue:${eventId}` }, { $set: { status: "acked" } });
   }
 
   async isDone(key: string): Promise<boolean> {
-    return ((await this.doc()).done ?? []).includes(key);
+    return (await this.store.find(COLLECTION, { _id: `done:${key}` }, {}, 1)).length > 0;
   }
 
   async markDone(key: string): Promise<void> {
-    await this.store.upsert(COLLECTION, { _id: ID }, { $push: { done: key } });
+    await this.store.upsert(COLLECTION, { _id: `done:${key}` }, { $set: { doneAt: new Date().toISOString() } });
   }
 }

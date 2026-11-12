@@ -15,7 +15,10 @@ function fakeRpc() {
     calls.push({ name, args: a });
     const c = col(a.p_collection);
     if (name === "mc_find") {
-      return [...c.values()].filter((d) => match(d, a.p_filter)).slice(0, a.p_limit)
+      const [sk] = Object.keys(a.p_sort ?? {});
+      const rows = [...c.values()].filter((d) => match(d, a.p_filter));
+      if (sk) rows.sort((x, y) => (x[sk] < y[sk] ? -1 : x[sk] > y[sk] ? 1 : 0) * a.p_sort[sk]);
+      return rows.slice(0, a.p_limit)
         .map((d) => structuredClone(d));
     }
     if (a.p_action === "insert") {
@@ -72,12 +75,25 @@ describe("store", () => {
     expect(await s.cursor()).toBe("2026-01-01T00:00:00.000Z");
   });
 
-  it("queue drains once", async () => {
+  it("drain does not remove until ack", async () => {
     const s = new AgentState(new McStore(fakeRpc().rpc));
     await s.enqueue({ id: "a" });
     await s.enqueue({ id: "b" });
     expect(await s.drain()).toHaveLength(2);
-    expect(await s.drain()).toHaveLength(0);
+    expect(await s.drain()).toHaveLength(2);
+    await s.ack("a");
+    const left = await s.drain();
+    expect(left.map((e) => e.id)).toEqual(["b"]);
+  });
+
+  it("enqueue same id twice keeps one", async () => {
+    const { rpc, db } = fakeRpc();
+    const s = new AgentState(new McStore(rpc));
+    await s.enqueue({ id: "a" });
+    await s.ack("a");
+    await s.enqueue({ id: "a" });
+    expect([...db.get("agent_state")!.keys()]).toEqual(["queue:a"]);
+    expect(await s.drain()).toHaveLength(1);
   });
 
   it("done keys", async () => {
@@ -85,6 +101,23 @@ describe("store", () => {
     expect(await s.isDone("k")).toBe(false);
     await s.markDone("k");
     expect(await s.isDone("k")).toBe(true);
+  });
+
+  it("markDone twice keeps one doc", async () => {
+    const { rpc, db } = fakeRpc();
+    const s = new AgentState(new McStore(rpc));
+    await s.markDone("k");
+    await s.markDone("k");
+    expect([...db.get("agent_state")!.keys()]).toEqual(["done:k"]);
+  });
+
+  it("singleton doc has no done or queue fields after markDone/enqueue", async () => {
+    const { rpc, db } = fakeRpc();
+    const s = new AgentState(new McStore(rpc));
+    await s.setStopped(true);
+    await s.markDone("k");
+    await s.enqueue({ id: "a" });
+    expect(Object.keys(db.get("agent_state")!.get("agent-core")).sort()).toEqual(["_id", "stopped"]);
   });
 
   it("rpc headers", async () => {
