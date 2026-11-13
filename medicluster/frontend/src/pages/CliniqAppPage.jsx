@@ -104,7 +104,11 @@ function Sidebar({ onAsk, onNew, active, returnHref, user, role }) {
 function CliniqAppContent() {
   const { user } = useAuth();
   const { injectReplayMessage, handleChatSubmit, reset } = useCliniqChat();
-  const embed = new URLSearchParams(window.location.search).get('embed') === '1';
+  // Inside the agent console's Chat tab: chat only. Detect the frame itself, because a login redirect can drop ?embed=1.
+  const embed = (() => {
+    if (new URLSearchParams(window.location.search).get('embed') === '1') return true;
+    try { return window.self !== window.top; } catch { return true; }
+  })();
   // In the console the left column already exists, so the chat starts with the Live Agent panel closed.
   const [showLiveStrip, setShowLiveStrip] = useState(!embed);
   const [showSidebar, setShowSidebar] = useState(true);
