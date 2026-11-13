@@ -5,7 +5,6 @@ import { getMlHealth } from "../api/apiClient";
 import { NAV_GROUPS, NAV_ITEMS, isActive } from "../navigation";
 import Logo from "./Logo";
 import { Bell, ChartNoAxesCombined, ScanLine, Brain, Activity, Users, CalendarClock, FileText, MessageCircle, Sparkles, Hospital, Radio, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen, X, Bot } from "lucide-react";
-import FloatingChatLauncher from "../chat/FloatingChatLauncher";
 
 const NAV_ICONS = { Alerts: Bell, Dashboard: ChartNoAxesCombined, Imaging: ScanLine, "3D Tumor Explorer": Brain, "Deterioration Radar": Activity, Patients: Users, Reminders: CalendarClock, Reports: FileText, CliniQ: MessageCircle, "Clinical AI": Sparkles, Agent: Bot, Hospitals: Hospital, Dispatch: Radio };
 
@@ -119,7 +118,6 @@ export default function AppShell({ children }) {
         {sidebarClosed && <button type="button" className="mc-sidebar-toggle mc-sidebar-reopen" aria-label="Open sidebar" aria-expanded="false" aria-controls="app-sidebar" title="Open sidebar" onClick={() => setSidebarClosed(false)}><PanelLeftOpen size={20} aria-hidden="true" /></button>}
         <button type="button" className="mc-mobile-menu" onClick={() => setMenuOpen(o => !o)} aria-label={menuOpen ? "Close" : "Menu"} aria-expanded={menuOpen} aria-controls="app-sidebar"><MenuIcon size={20} aria-hidden="true" /></button>
         <main className="mc-workspace-main flex-1 min-w-0">{children}</main>
-        <FloatingChatLauncher />
       </div>
     </div>
   );

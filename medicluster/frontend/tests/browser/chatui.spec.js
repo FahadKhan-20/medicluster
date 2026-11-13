@@ -239,7 +239,8 @@ async function setupChatMocks(page) {
   };
 }
 
-test('chat launcher opens on /alerts, asks for nearest ambulance, renders map card, and confirms action', async ({
+// The floating launcher was removed from the workspace; CliniQ lives at /cliniq and in the console.
+test.skip('chat launcher opens on /alerts, asks for nearest ambulance, renders map card, and confirms action', async ({
   page,
 }) => {
   const mocks = await setupChatMocks(page);
@@ -316,7 +317,8 @@ test('chat launcher opens on /alerts, asks for nearest ambulance, renders map ca
   expect(actionReq.body).toEqual({ decision: 'approve' });
 });
 
-test('chat conversation persists across page navigation and can be toggled with Ctrl+K', async ({
+// The floating launcher was removed from the workspace; CliniQ lives at /cliniq and in the console.
+test.skip('chat conversation persists across page navigation and can be toggled with Ctrl+K', async ({
   page,
 }) => {
   await setupChatMocks(page);

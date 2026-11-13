@@ -42,8 +42,8 @@ export const SUGGESTED_PROMPTS = [
 
 export default function SuggestedChips({ onSelect, disabled = false, className = '', centered = false }) {
   return (
-    <div className={`space-y-2 ${className}`} data-testid="suggested-chips">
-      <div className={`flex flex-wrap gap-1.5 ${centered ? 'justify-center gap-2' : ''}`}>
+    <div className={className} data-testid="suggested-chips">
+      <div className={`grid gap-2 ${centered ? 'grid-cols-2 sm:grid-cols-3 max-w-2xl mx-auto' : 'grid-cols-2 lg:grid-cols-3'}`}>
         {SUGGESTED_PROMPTS.map((prompt) => {
           const Icon = prompt.icon;
           return (
@@ -52,11 +52,16 @@ export default function SuggestedChips({ onSelect, disabled = false, className =
               type="button"
               disabled={disabled}
               onClick={() => onSelect(prompt.text)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-paper border border-line hover:border-slate-400 hover:bg-white text-ink transition-all text-left shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+              className="group flex items-start gap-2.5 p-3 rounded-2xl bg-white border border-[#e2e8db] hover:border-[#c9d2bf] hover:bg-[#f7f9f3] text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid={`suggested-chip-${prompt.category}`}
             >
-              <Icon size={12} className="text-slate-500 shrink-0" />
-              <span>{prompt.text}</span>
+              <span className="w-8 h-8 shrink-0 rounded-xl bg-[#e7ecdf] grid place-items-center text-[#17251d] group-hover:bg-[#17251d] group-hover:text-[#fbfaf7] transition-colors">
+                <Icon size={15} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px] font-semibold text-[#17251d] leading-tight">{prompt.label}</span>
+                <span className="block mt-0.5 text-[11.5px] text-slate-500 leading-snug">{prompt.text}</span>
+              </span>
             </button>
           );
         })}

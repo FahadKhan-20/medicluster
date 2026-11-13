@@ -85,3 +85,22 @@
  .mc-hospital-radius button { flex: 1; padding: 10px; }
  .mc-hospital-results { padding: 18px; }
 }
+
+/* Compact one-row search bar: heading | search | radius (wraps below 1100px). */
+.mc-hospital-search { grid-template-columns: auto minmax(0,1fr) auto; padding: 10px 12px 10px 14px; gap: 6px 16px; border-radius: 20px; }
+.mc-hospital-search-heading .mc-hospital-icon { width: 34px; height: 34px; border-radius: 11px; }
+.mc-hospital-search-heading h2 { font-size: 15px; white-space: nowrap; }
+.mc-hospital-search-heading p { display: none; }
+.mc-hospital-radius { grid-column: auto; gap: 5px; flex-wrap: nowrap; }
+.mc-hospital-radius legend { padding-top: 6px; margin-right: 6px; white-space: nowrap; }
+.mc-hospital-radius button { padding: 5px 11px; }
+.mc-hospital-search-credit { grid-column: 1 / -1; text-align: right; margin-top: -2px; }
+.mc-hospital-query { padding: 3px 3px 3px 12px; }
+.mc-hospital-query button { padding: 8px 14px; }
+@media (max-width: 1100px) {
+  .mc-hospital-search { grid-template-columns: auto minmax(0,1fr); }
+  .mc-hospital-radius { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .mc-hospital-search { grid-template-columns: 1fr; }
+}

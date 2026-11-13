@@ -59,6 +59,16 @@
     }
     :root { --chip-bg: #1d1d20; }
     :root[data-theme="light"] { --chip-bg: #e2e9d9; }
+    /* MediCluster light dialogs (admin key, settings sheets) */
+    [data-theme="light"] .sheet-overlay { background: rgba(23,37,29,.32); }
+    [data-theme="light"] .sheet-dialog { background: #fbfaf7; border-color: #e2e8db; box-shadow: 0 24px 70px rgba(23,37,29,.18); color: #17251d; }
+    [data-theme="light"] .sheet-footer { background: #f3f5ee; border-top-color: #e2e8db; }
+    [data-theme="light"] .sheet-dialog h2 { color: #17251d; }
+    [data-theme="light"] .sheet-dialog input { background: #fff !important; border-color: #d6ddce !important; color: #17251d !important; }
+    [data-theme="light"] .sheet-dialog input:focus { border-color: #ad633f !important; box-shadow: 0 0 0 3px rgba(173,99,63,.15); }
+    [data-theme="light"] .sheet-dialog code { background: #e7ecdf; padding: 1px 5px; border-radius: 5px; }
+    [data-theme="light"] .sheet-dialog .btn-success { background: #17251d; color: #fbfaf7; }
+    [data-theme="light"] .sheet-dialog .btn-subtle { background: #fff; border: 1px solid #e2e8db; color: #17251d; }
     [data-theme="light"] .tree-item-link .elbow-line { border-color: #b9c4b0; }
 
     html, body {
@@ -1282,7 +1292,7 @@
               <circle cx="11" cy="11" r="7"></circle>
               <path d="m20 20-3.5-3.5"></path>
             </svg>
-            <input id="searchInput" type="text" placeholder="Search audits" aria-label="Search audits">
+            <input id="searchInput" type="search" autocomplete="off" placeholder="Search audits" aria-label="Search audits">
           </label>
           <button id="btnNewScan" class="btn-action-round" title="New scan reprocess" aria-label="New audit">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
@@ -1624,8 +1634,8 @@
     <div class="sheet-dialog" onclick="event.stopPropagation()">
       <div class="sheet-header">
         <div style="display:flex; flex-direction:column; gap:6px;">
-          <h2 style="margin:0; font-size:18px; font-weight:700; letter-spacing:-.02em;">🔑 Administrator Authentication</h2>
-          <span style="font-size:12.5px; color:var(--text-muted);">Enter the MediCluster X-Admin-Key</span>
+          <h2 style="margin:0; font-size:18px; font-weight:700; letter-spacing:-.02em;">Unlock the agent console</h2>
+          <span style="font-size:12.5px; color:var(--text-muted);">Enter the admin key (AGENT_ADMIN_KEY)</span>
         </div>
         <button class="icon-btn" onclick="App.closeAuthModal()">✕</button>
       </div>
@@ -1635,7 +1645,7 @@
         </p>
         <label style="display:flex; flex-direction:column; gap:8px;">
           <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">X-Admin-Key</span>
-          <input id="modalAdminKeyInput" type="password" placeholder="e.g. admin-key-..." style="height:44px; border:1px solid var(--border-inner); border-radius:12px; background:var(--bg-dark-input); padding:0 14px; outline:none; color:var(--text);">
+          <input id="modalAdminKeyInput" type="password" placeholder="Admin key" autocomplete="off" onkeydown="if(event.key==='Enter')App.saveAdminKeyFromModal()" style="height:44px; border:1px solid var(--border-inner); border-radius:12px; background:var(--bg-dark-input); padding:0 14px; outline:none; color:var(--text);">
         </label>
       </div>
       <div class="sheet-footer">
@@ -1710,7 +1720,7 @@
       agents: [],
       workflowFilter: null,
       health: { status: 'ok', stopped: false, services: {} },
-      groupsOpen: { review: true, history: true, agents: true },
+      groupsOpen: { review: true, history: true, agents: true, chat: true },
       sidebarCollapsed: false,
       search: '',
       toastTimer: null,
@@ -1724,6 +1734,7 @@
       init() {
         this.initTheme();
         this.renderTabs();
+        this.renderSidebarChat();
         this.updateKeyStatusUI();
         this.fetchHealth();
         if (this.adminKey) {
