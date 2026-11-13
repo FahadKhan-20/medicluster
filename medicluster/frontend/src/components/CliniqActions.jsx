@@ -168,7 +168,6 @@ export default function CliniqActions({ data, onSelect, onLocation }) {
           ))}
         </div>
       )}
-      {data.model && <p className="text-[10px] text-slate-500">{data.provider} · {data.model}</p>}
     </div>
   );
 }

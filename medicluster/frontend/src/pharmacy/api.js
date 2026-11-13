@@ -76,6 +76,10 @@ async function apiRequest(endpoint, { method = 'GET', body, params, role = 'phar
     data = await res.text();
   }
 
+  if (res.status === 401 && /\/api\/(courier|pharmacy)-auth\/login$/.test(String(endpoint))) {
+    throw new ApiError(role === 'courier' ? 'Wrong mobile number or PIN.' : 'Wrong email or password.', 401, data);
+  }
+
   if (res.status === 401) {
     if (role === 'courier') {
       clearCourierSession();
