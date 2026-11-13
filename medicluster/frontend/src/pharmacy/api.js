@@ -100,6 +100,21 @@ async function apiRequest(endpoint, { method = 'GET', body, params, role = 'phar
   return data;
 }
 
+// Backend documents carry Mongo `_id`; screens key and route on `id`.
+const withId = (o) => (o && typeof o === 'object' && !Array.isArray(o) && !o.id && o._id ? { ...o, id: String(o._id) } : o);
+function normalizeIds(data) {
+  if (Array.isArray(data)) return data.map(withId);
+  if (data && typeof data === 'object') {
+    const out = withId(data);
+    for (const k of ['orders', 'deliveries', 'items', 'order', 'delivery']) {
+      if (Array.isArray(out[k])) out[k] = out[k].map(withId);
+      else if (out[k] && typeof out[k] === 'object') out[k] = withId(out[k]);
+    }
+    return out;
+  }
+  return data;
+}
+
 /* =========================================================================
    Pharmacist Authentication & Operations
    ========================================================================= */
@@ -113,6 +128,7 @@ export async function loginPharmacist({ email, password }) {
     body: { email, password },
     role: 'pharmacy',
   });
+  if (Array.isArray(data?.pharmacies)) data.pharmacies = data.pharmacies.map(withId);
   setPharmacistSession(data);
   return data;
 }
@@ -121,23 +137,23 @@ export async function loginPharmacist({ email, password }) {
  * List orders filtered by pharmacyId and optional status.
  */
 export async function getPharmacyOrders({ pharmacyId = getActivePharmacyId(), status, signal } = {}) {
-  return apiRequest('/api/pharmacy/orders', {
+  return normalizeIds(await apiRequest('/api/pharmacy/orders', {
     method: 'GET',
     params: { pharmacyId, status },
     role: 'pharmacy',
     signal,
-  });
+  }));
 }
 
 /**
  * Fetch a single order by ID.
  */
 export async function getPharmacyOrder(id, { signal } = {}) {
-  return apiRequest(`/api/pharmacy/orders/${id}`, {
+  return normalizeIds(await apiRequest(`/api/pharmacy/orders/${id}`, {
     method: 'GET',
     role: 'pharmacy',
     signal,
-  });
+  }));
 }
 
 /**
@@ -218,23 +234,23 @@ export async function loginCourier({ phone, pin }) {
  * List deliveries for the logged-in courier.
  */
 export async function getCourierDeliveries({ status, signal } = {}) {
-  return apiRequest('/api/courier/deliveries', {
+  return normalizeIds(await apiRequest('/api/courier/deliveries', {
     method: 'GET',
     params: { status },
     role: 'courier',
     signal,
-  });
+  }));
 }
 
 /**
  * Get single delivery detail with patient address and items.
  */
 export async function getCourierDelivery(id, { signal } = {}) {
-  return apiRequest(`/api/courier/deliveries/${id}`, {
+  return normalizeIds(await apiRequest(`/api/courier/deliveries/${id}`, {
     method: 'GET',
     role: 'courier',
     signal,
-  });
+  }));
 }
 
 /**

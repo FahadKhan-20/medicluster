@@ -69,7 +69,7 @@ async function call(method, path, token, body) {
   o = await call("POST", `/api/pharmacy/orders/${orderId}/actions`, ph.token, { action: "assign_courier", courierId: String(courier._id || courier.id) });
   step(5, `Pharmacist assigned courier ${courier.name || courier.phone}`, `-> ${o.status || o.order?.status}`);
 
-  const co = await call("POST", "/api/courier-auth/login", null, { phone: courier.phone, pin: pw });
+  const co = await call("POST", "/api/courier-auth/login", null, { phone: courier.phone, pin: process.env.PHARMA_DEMO_COURIER_PIN });
   step(6, "Courier signed in", co.staff?.name || "");
   const dl = await call("GET", "/api/courier/deliveries", co.token);
   const dlist = Array.isArray(dl) ? dl : dl.deliveries || dl.items || [];

@@ -36,6 +36,10 @@ async function seedPharmacyDemo() {
   }
 
   const passwordHash = await bcrypt.hash(password.trim(), 10);
+  // Couriers sign in with a short numeric PIN (the courier app accepts 4-6 digits).
+  const courierPin = String(process.env.PHARMA_DEMO_COURIER_PIN || "").trim();
+  if (!/^\d{4,6}$/.test(courierPin)) throw new Error("PHARMA_DEMO_COURIER_PIN must be 4-6 digits");
+  const courierPinHash = await bcrypt.hash(courierPin, 10);
 
   // 1. Pharmacy 1: Central
   let pharmCentral = await Pharmacy.findOne({ name: "MediCluster Central Pharmacy" }).lean();
@@ -133,13 +137,14 @@ async function seedPharmacyDemo() {
       name: "Ramesh Courier",
       role: "courier",
       phone: c1Phone,
-      passwordHash,
+      passwordHash: courierPinHash,
       pharmacyIds: [String(pharmCentral._id), String(pharmSouth._id)],
       active: true,
     });
     console.log("Created Courier 1: " + c1Phone);
   } else {
-    console.log("Found existing Courier 1: " + c1Phone);
+    await PharmacyStaff.updateOne({ _id: courier1._id }, { $set: { passwordHash: courierPinHash } });
+    console.log("Found existing Courier 1: " + c1Phone + " (PIN refreshed)");
   }
 
   // 7. Seed Courier 2
@@ -150,13 +155,14 @@ async function seedPharmacyDemo() {
       name: "Kavita Express",
       role: "courier",
       phone: c2Phone,
-      passwordHash,
+      passwordHash: courierPinHash,
       pharmacyIds: [String(pharmCentral._id), String(pharmSouth._id)],
       active: true,
     });
     console.log("Created Courier 2: " + c2Phone);
   } else {
-    console.log("Found existing Courier 2: " + c2Phone);
+    await PharmacyStaff.updateOne({ _id: courier2._id }, { $set: { passwordHash: courierPinHash } });
+    console.log("Found existing Courier 2: " + c2Phone + " (PIN refreshed)");
   }
 
   // Print summary of logins

@@ -200,7 +200,7 @@ export default function PharmacyQueueScreen({ onSelectOrder, pharmacyName }) {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span className="rx-card-title">
-                        Order #{order.id?.slice(-6).toUpperCase() || order.id}
+                        Order #{String(order.id || order._id || "").slice(-6).toUpperCase()}
                       </span>
                       <span className={`rx-badge ${badgeClass}`}>
                         {statusLabel}

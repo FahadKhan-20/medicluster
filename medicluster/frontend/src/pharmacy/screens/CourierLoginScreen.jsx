@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Truck, Phone, KeyRound, ArrowRight, AlertCircle } from 'lucide-react';
+import { Truck, Phone, KeyRound } from 'lucide-react';
+import StaffLogin, { LoginField } from '../components/StaffLogin.jsx';
 import { loginCourier } from '../api.js';
 
 export default function CourierLoginScreen({ onLoginSuccess }) {
@@ -11,13 +12,13 @@ export default function CourierLoginScreen({ onLoginSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!phone || !pin) {
-      setError('Please enter both phone number and 4-digit PIN.');
+      setError('Please enter your phone number and PIN.');
       return;
     }
     setBusy(true);
     setError('');
     try {
-      const res = await loginCourier({ phone, pin });
+      const res = await loginCourier({ phone: phone.replace(/\s+/g, ''), pin });
       onLoginSuccess(res);
     } catch (err) {
       setError(err.message || 'Login failed. Please verify phone and PIN.');
@@ -27,83 +28,24 @@ export default function CourierLoginScreen({ onLoginSuccess }) {
   };
 
   return (
-    <div className="rx-portal">
-      <div className="rx-container" style={{ justifyContent: 'center', padding: '24px' }}>
-        <div className="rx-card" style={{ maxWidth: 420, margin: '0 auto', width: '100%' }}>
-          <div style={{ textAlign: 'center', marginBottom: 8 }}>
-            <div style={{
-              width: 52,
-              height: 52,
-              borderRadius: '50%',
-              background: '#ede9fe',
-              color: '#6d28d9',
-              display: 'grid',
-              placeItems: 'center',
-              margin: '0 auto 12px auto'
-            }}>
-              <Truck size={28} />
-            </div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: '#17251d' }}>
-              Courier Delivery
-            </h1>
-            <p className="rx-card-meta" style={{ marginTop: 4 }}>
-              Sign in with your registered phone number and PIN
-            </p>
-          </div>
-
-          {error && (
-            <div className="rx-alert rx-alert-error" role="alert">
-              <AlertCircle size={18} style={{ flexShrink: 0 }} />
-              <div>{error}</div>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="rx-field">
-              <label htmlFor="courier-phone">Mobile Phone Number</label>
-              <input
-                id="courier-phone"
-                type="tel"
-                className="rx-input"
-                placeholder="+91 98765 43210"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
-                autoFocus
-              />
-            </div>
-
-            <div className="rx-field">
-              <label htmlFor="courier-pin">4-Digit Security PIN</label>
-              <input
-                id="courier-pin"
-                type="password"
-                maxLength={6}
-                className="rx-input"
-                placeholder="••••"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="rx-btn"
-              disabled={busy}
-              style={{ width: '100%', marginTop: 6 }}
-            >
-              {busy ? 'Verifying PIN…' : 'Sign in as Courier'} <ArrowRight size={16} />
-            </button>
-          </form>
-
-          <div style={{ textAlign: 'center', marginTop: 12 }}>
-            <a href="/login" className="rx-card-meta" style={{ textDecoration: 'none', color: '#55664f' }}>
-              ← Return to MediCluster Home
-            </a>
-          </div>
-        </div>
-      </div>
-    </div>
+    <StaffLogin
+      icon={Truck}
+      eyebrow="Courier app"
+      title="Courier Delivery"
+      subtitle="Pick up medicines, share your route and hand over with the patient's code."
+      error={error}
+      busy={busy}
+      busyLabel="Verifying PIN…"
+      submitLabel="Sign in as Courier"
+      onSubmit={handleSubmit}
+      backLabel="Return to MediCluster Home"
+      demo={{ label: 'Ramesh · +91 99999 11101', onUse: () => setPhone('+919999911101') }}
+    >
+      <LoginField id="courier-phone" label="Mobile number" icon={Phone} type="tel" inputMode="tel" placeholder="+91 98765 43210"
+        value={phone} onChange={(e) => setPhone(e.target.value.replace(/[^\d+\s]/g, ''))} required autoFocus autoComplete="tel" />
+      <LoginField id="courier-pin" label="Security PIN (4–6 digits)" icon={KeyRound} type="password" inputMode="numeric"
+        pattern="[0-9]{4,6}" maxLength={6} placeholder="••••••" autoComplete="one-time-code"
+        value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} required />
+    </StaffLogin>
   );
 }

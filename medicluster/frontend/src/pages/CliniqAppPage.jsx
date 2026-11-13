@@ -23,11 +23,11 @@ function CliniqAppContent() {
   const role = user?.role || (user?.id?.startsWith('patient') ? 'patient' : 'clinician');
   const returnHref = role === 'patient' ? '/app' : '/dashboard';
 
-  // ?embed=1: chat only, dark, for the agent console (localhost:8100/console -> Chat)
+  // ?embed=1: chat only, in the MediCluster theme, for the agent console (localhost:8100/console -> Chat)
   const embed = new URLSearchParams(window.location.search).get('embed') === '1';
   if (embed) {
     return (
-      <div className="cq-dark flex flex-col h-screen w-screen overflow-hidden" data-testid="cliniq-embed">
+      <div className="flex flex-col h-screen w-screen bg-paper text-ink overflow-hidden" data-testid="cliniq-embed">
         <ChatView embed className="flex-1 h-full" />
       </div>
     );

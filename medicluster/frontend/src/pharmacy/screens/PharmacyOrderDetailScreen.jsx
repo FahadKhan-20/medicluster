@@ -183,7 +183,7 @@ export default function PharmacyOrderDetailScreen({ orderId, onBack }) {
         </button>
         <div>
           <span style={{ fontSize: 13, color: '#52664d', fontWeight: 600 }}>
-            Order #{order.id?.slice(-8).toUpperCase() || order.id}
+            Order #{String(order.id || order._id || "").slice(-6).toUpperCase()}
           </span>
         </div>
       </div>
