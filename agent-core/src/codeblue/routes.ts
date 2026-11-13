@@ -59,8 +59,8 @@ export async function handleCodeBlueRoute(
 
   // 1. Static Trauma-Bay Page: GET /codeblue
   if (method === "GET" && path === "/codeblue") {
-    // Page is accessible (passes adminKey to client script for polling)
-    sendHtml(res, 200, renderCodeBluePage(adminKey));
+    // Public shell only: the page reads the admin key from the console session, never from the server.
+    sendHtml(res, 200, renderCodeBluePage());
     return true;
   }
 
@@ -125,7 +125,7 @@ export async function handleCodeBlueRoute(
 
   // 3. GET /codeblue/:id/card
   if (method === "GET" && subRoute === "card") {
-    const telemetry = await engine.tick(sessionId);
+    const telemetry = await engine.poll(sessionId);
     sendJson(res, 200, {
       card: session.getLatestCard(),
       telemetry,

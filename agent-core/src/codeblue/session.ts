@@ -239,6 +239,37 @@ export class CodeBlueSession {
     return this.latestTelemetry;
   }
 
+  /**
+   * Cheap refresh for UI polling: live clock, CPR/epi timers and monitor strip, with the most recent
+   * specialist panels and consensus card. Never calls Jev (the slow part runs in tick()).
+   */
+  liveTelemetry(): SessionTelemetry | null {
+    const t = this.latestTelemetry;
+    if (!t) return null;
+    const elapsed = this.getElapsedSeconds();
+    const monitor = this.simulator.getCurrentState();
+    const cprElapsedSeconds = elapsed % CPR_CYCLE_SECONDS;
+    const epiInfo = computeNextEpiDue(monitor.rhythmName, monitor.hasPulse, this.shockCount, elapsed, this.lastEpiTimeSeconds);
+    return {
+      ...t,
+      codeTimeSeconds: elapsed,
+      cprCycleNumber: Math.floor(elapsed / CPR_CYCLE_SECONDS) + 1,
+      cprRemainingSeconds: Math.max(0, CPR_CYCLE_SECONDS - cprElapsedSeconds),
+      cprElapsedSeconds,
+      nextEpiDueInSeconds: epiInfo.dueInSeconds,
+      nextEpiText: epiInfo.statusText,
+      shockCount: this.shockCount,
+      amiodaroneDosesGiven: this.amiodaroneDosesGiven,
+      hasPulse: monitor.hasPulse,
+      currentRhythm: monitor.rhythmName,
+      heartRateBpm: monitor.heartRateBpm,
+      monitorWaveform: monitor.waveformChunk,
+      phaseDescription: monitor.phaseDescription,
+      card: this.latestCard ?? t.card,
+      stopped: this.stopped,
+    };
+  }
+
   getLatestCard(): ConsensusCard | null {
     return this.latestCard;
   }
@@ -331,6 +362,28 @@ export class CodeBlueEngine {
     const session = this.sessions.get(id);
     if (!session) throw new Error(`Code Blue session ${id} not found`);
     return session.tick(this.deps);
+  }
+
+  private readonly inflight = new Map<string, Promise<unknown>>();
+
+  /**
+   * UI poll: answers immediately from live telemetry and keeps at most one consensus tick running
+   * per session in the background, so a slow Jev call never blocks the trauma-bay screen.
+   */
+  async poll(id: string): Promise<SessionTelemetry> {
+    const session = this.sessions.get(id);
+    if (!session) throw new Error(`Code Blue session ${id} not found`);
+    if (!this.inflight.has(id)) {
+      const run = session
+        .tick(this.deps)
+        .catch(() => undefined)
+        .finally(() => this.inflight.delete(id));
+      this.inflight.set(id, run);
+    }
+    const live = session.liveTelemetry();
+    if (live) return live;
+    await this.inflight.get(id);
+    return session.getLatestTelemetry() as SessionTelemetry;
   }
 
   async ack(

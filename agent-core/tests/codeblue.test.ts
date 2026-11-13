@@ -581,8 +581,10 @@ describe("6. HTTP API Routes (/codeblue)", () => {
     const result = get();
     expect(result.status).toBe(200);
     expect(result.headers["content-type"]).toContain("text/html");
-    expect(result.text).toContain("MEDICLUSTER — CODE BLUE WAR ROOM");
+    expect(result.text).toContain("Code Blue War Room");
     expect(result.text).toContain("ecgCanvas");
+    // The public page must never carry the admin key.
+    expect(result.text).not.toContain("secret-key");
   });
 
   it("rejects unauthorized start request without admin key", async () => {
