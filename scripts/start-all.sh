@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start every MediCluster service locally, each in the background with its own log.
+# Start every MediCluster service locally (9 services), each in the background with its own log.
 #   ./scripts/start-all.sh          start everything
 #   ./scripts/start-all.sh stop     stop everything started by this script
 #   ./scripts/start-all.sh status   show which ports answer
@@ -12,6 +12,7 @@ RUN="$ROOT/.run"; mkdir -p "$RUN"
 SERVICES=(
   "ml-engine|medicluster/ml-engine|./venv/bin/python app.py|http://localhost:8080/health"
   "intelligence|medicluster/intelligence-engine|.venv/bin/python app.py|http://localhost:8090/health"
+  "chest-imaging|medicluster/ml-engine|../intelligence-engine/.venv/bin/python imaging_server.py|http://localhost:8091/health"
   "brain-mri|medicluster/brain-mri-service|.venv/bin/python -m uvicorn server:app --host 127.0.0.1 --port 8001|http://localhost:8001/health"
   "backend|medicluster/backend|npm start|http://localhost:5000/api/health"
   "dispatch-api|ambulance-dispatch/backend/api|npm start|http://localhost:3001/health"
@@ -31,7 +32,10 @@ status() {
 stop() {
   for f in "$RUN"/*.pid; do
     [ -e "$f" ] || continue
-    pid=$(cat "$f"); kill "$pid" 2>/dev/null && echo "stopped $(basename "$f" .pid)"; rm -f "$f"
+    pid=$(cat "$f")
+    # setsid made each service its own process group: kill the whole group, not just the wrapper.
+    kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null
+    echo "stopped $(basename "$f" .pid)"; rm -f "$f"
   done
 }
 
