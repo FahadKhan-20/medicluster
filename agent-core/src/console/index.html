@@ -3142,5 +3142,50 @@
 
     window.addEventListener('DOMContentLoaded', () => App.init());
   </script>
+
+  <!-- CliniQ chat drawer: the same chat as the MediCluster app (/cliniq), embedded next to the audit feed -->
+  <style>
+    #cqChatBtn{position:fixed;right:24px;bottom:24px;z-index:60;display:flex;align-items:center;gap:8px;height:48px;padding:0 18px;border-radius:24px;border:0;background:#7ee2a8;color:#0d1f15;font:600 14px/1 inherit;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+    #cqChatBtn:hover{filter:brightness(1.05)}
+    #cqChatDrawer{position:fixed;top:0;right:0;bottom:0;width:min(520px,100vw);z-index:70;background:var(--bg-panel,#1c1c1f);border-left:1px solid var(--border-inner,#2a2a2e);box-shadow:-12px 0 32px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .2s ease;display:flex;flex-direction:column}
+    #cqChatDrawer.open{transform:none}
+    #cqChatDrawer header{display:flex;align-items:center;justify-content:space-between;gap:8px;height:52px;padding:0 14px;border-bottom:1px solid var(--border-inner,#2a2a2e);font-weight:700}
+    #cqChatDrawer header a,#cqChatDrawer header button{color:var(--text,#eee);background:none;border:0;font-size:13px;cursor:pointer;text-decoration:none}
+    #cqChatDrawer iframe{flex:1;width:100%;border:0;background:#fff}
+  </style>
+  <button id="cqChatBtn" type="button" aria-label="Open CliniQ chat" title="Ask CliniQ (Ctrl+K)">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Chat with CliniQ
+  </button>
+  <aside id="cqChatDrawer" aria-label="CliniQ chat" aria-hidden="true">
+    <header>
+      <span>CliniQ chat</span>
+      <span style="display:flex;gap:14px;align-items:center">
+        <a id="cqChatPopout" target="_blank" rel="noopener">Open full screen ↗</a>
+        <button id="cqChatClose" type="button" aria-label="Close chat">✕</button>
+      </span>
+    </header>
+    <iframe id="cqChatFrame" title="CliniQ chat" loading="lazy"></iframe>
+  </aside>
+  <script>
+    (function () {
+      // Chat lives in the MediCluster app (staff login + role-scoped tools). Default: same host, port 3000.
+      var url = window.CLINIQ_CHAT_URL || (location.protocol + '//' + location.hostname + ':3000/cliniq');
+      var drawer = document.getElementById('cqChatDrawer'), frame = document.getElementById('cqChatFrame');
+      document.getElementById('cqChatPopout').href = url;
+      function toggle(open) {
+        open = open === undefined ? !drawer.classList.contains('open') : open;
+        if (open && !frame.src) frame.src = url;
+        drawer.classList.toggle('open', open);
+        drawer.setAttribute('aria-hidden', String(!open));
+      }
+      document.getElementById('cqChatBtn').addEventListener('click', function () { toggle(); });
+      document.getElementById('cqChatClose').addEventListener('click', function () { toggle(false); });
+      document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); toggle(); }
+        if (e.key === 'Escape') toggle(false);
+      });
+    })();
+  </script>
 </body>
 </html>

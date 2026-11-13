@@ -75,10 +75,14 @@ function createTools({request, hospitals = nearbyHospitals, recoverEmergency = r
   async function callDispatch(path, options = {}) {
     try {
       if (dispatchFetch) return await dispatchFetch(path, options);
-      const base = (process.env.DISPATCH_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
+      const base = (process.env.DISPATCH_API_URL || 'http://localhost:3001').replace(/\/+$/, '');
       const url = `${base}${path.startsWith('/') ? path : '/' + path}`;
       const headers = { 'Content-Type': 'application/json', Accept: 'application/json', ...options.headers };
-      const key = process.env.DISPATCH_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      // The dispatch API accepts the agent service identity only on its read/assign allowlist.
+      // Role checks for each tool happen above (staff/patient scoping + confirmation for writes).
+      const key = process.env.DISPATCH_API_KEY || (process.env.AGENT_JWT_SECRET
+        ? require('jsonwebtoken').sign({ sub: 'agent-core', kind: 'agent' }, process.env.AGENT_JWT_SECRET, { expiresIn: '2m' })
+        : null);
       if (key && !headers['Authorization']) headers['Authorization'] = `Bearer ${key}`;
       const res = await fetch(url, { ...options, headers, signal: AbortSignal.timeout(10000) });
       if (!res.ok) {
