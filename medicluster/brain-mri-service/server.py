@@ -20,7 +20,7 @@ import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 
-MODEL_DIR = Path(os.getenv("BRAIN_MODEL_DIR", "/home/vinay/cortia/models/mri"))
+MODEL_DIR = Path(os.getenv("BRAIN_MODEL_DIR", Path(__file__).with_name("models") / "mri"))
 MODEL_PATH = MODEL_DIR / "brain_tumor_model.tflite"
 PROBE_PATH = Path(os.getenv("BRAIN_PROBE_PATH", Path(__file__).with_name("probe_figshare.joblib")))
 # Tumor-type confidence below this (10% least-confident TRAIN images, out-of-fold) -> refer to radiologist.

@@ -21,7 +21,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 import server  # noqa: E402
 
-DATA = Path("/home/vinay/mc2-imgdata/medicluster/ml-engine/datasets/imaging/brain-mri-tumor/images")
+DATA = Path(__file__).resolve().parents[1] / "ml-engine/datasets/imaging/brain-mri-tumor/images"
 CLASSES = ["glioma", "meningioma", "pituitary"]  # Figshare classes
 MODEL_INDEX = {"glioma": 0, "meningioma": 1, "pituitary": 3}  # TFLite class_indices
 SEED = 1337

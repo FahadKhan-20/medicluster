@@ -7,7 +7,8 @@ Serves the Brain_health_monitor MobileNetV2 TFLite tumor classifier (imported by
 Run:
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-BRAIN_MODEL_DIR=/path/to/cortia/models/mri .venv/bin/python benchmark.py   # trains probe_figshare.joblib
+cp -r /path/to/cortia/models/mri models/mri   # model files are not in git
+.venv/bin/python benchmark.py   # trains probe_figshare.joblib
 .venv/bin/python -m uvicorn server:app --host 127.0.0.1 --port 8001
 ```
 
