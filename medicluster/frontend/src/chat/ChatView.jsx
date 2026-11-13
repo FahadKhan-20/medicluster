@@ -4,10 +4,8 @@ import CliniqActions from '../components/CliniqActions';
 import SuggestedChips from './SuggestedChips';
 import StepTimeline from './StepTimeline';
 import {
-  Send,
   Plus,
   ArrowUp,
-  Paperclip,
   X,
   RotateCcw,
   Sparkles,
@@ -190,6 +188,24 @@ export default function ChatView({
     scrollBottom();
   }, [messages.length, loading]);
 
+  // Embedded in the agent console: its sidebar Chat branches send "ask"/"new" commands.
+  useEffect(() => {
+    if (!embed) return undefined;
+    const onMessage = (e) => {
+      if (e.source !== window.parent) return;
+      let sameHost = false;
+      try { sameHost = new URL(e.origin).hostname === window.location.hostname; } catch { /* bad origin */ }
+      if (!sameHost || !e.data || typeof e.data !== 'object') return;
+      if (e.data.type === 'cliniq:new') reset();
+      if (e.data.type === 'cliniq:ask' && typeof e.data.text === 'string' && e.data.text.trim()) {
+        reset();
+        setTimeout(() => handleChatSubmit(e.data.text.slice(0, 500)), 0);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [embed, reset, handleChatSubmit]);
+
   const handleSubmit = (e) => {
     if (e) e.preventDefault();
     if ((!input.trim() && attachments.length === 0) || loading) return;
@@ -347,16 +363,6 @@ export default function ChatView({
 
         {count === 0 && !embed && (
           <div className="py-4 space-y-4">
-            <div className="p-4 rounded-2xl bg-white border border-line space-y-2 text-center">
-              <div className="inline-flex p-2.5 rounded-full bg-emerald-50 text-emerald-800 mb-1">
-                <Sparkles size={20} />
-              </div>
-              <h3 className="font-semibold text-sm text-ink">Ask MediCluster Agent</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                Surveillance, emergency dispatch, imaging, deterioration analysis, and Code Blue protocols.
-              </p>
-            </div>
-
             {showSuggestedChips && (
               <SuggestedChips
                 onSelect={(query) => handleChatSubmit(query)}
@@ -366,6 +372,7 @@ export default function ChatView({
           </div>
         )}
 
+        <div className={count > 0 || loading ? 'max-w-3xl mx-auto w-full space-y-7 pt-2 pb-4' : 'contents'}>
         {messages.map((msg, i) =>
           msg.role === 'user' ? (
             <div key={i} className="flex justify-end" data-testid="chat-user-message">
@@ -383,19 +390,20 @@ export default function ChatView({
                   </div>
                 )}
                 {msg.content && (
-                  <div className="p-3 rounded-2xl rounded-br-sm bg-ink text-paper text-[13.5px] leading-relaxed shadow-xs">
+                  <div className="px-4 py-2.5 rounded-2xl bg-[#e7ecdf] text-ink text-[14.5px] leading-relaxed">
                     {msg.content}
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <div key={i} className="flex gap-2.5 items-start" data-testid="chat-assistant-message">
-              <span className="w-6 h-6 rounded-full bg-emerald-800 text-white grid place-items-center text-xs font-semibold shrink-0 mt-0.5">
-                Q
-              </span>
-              <div className="flex-1 min-w-0 space-y-2">
-                <div className="p-3.5 rounded-2xl rounded-tl-sm bg-white border border-line text-[13.5px] text-ink shadow-xs">
+            <div key={i} className="space-y-3" data-testid="chat-assistant-message">
+              <div className="flex items-center gap-2 text-[13px] text-slate-500">
+                <span className="w-5 h-5 rounded-md bg-ink text-paper grid place-items-center text-[10px] font-bold">Q</span>
+                <span className="font-medium">CliniQ</span>
+              </div>
+              <div className="min-w-0 space-y-3">
+                <div className="text-[14.5px] leading-relaxed text-ink space-y-3">
                   {renderChatMarkdown(msg.content)}
                   {msg.agent && <StepTimeline agentData={msg.agent} />}
                   {msg.agent && (
@@ -430,9 +438,10 @@ export default function ChatView({
             <span className="italic font-medium">Agent is thinking…</span>
           </div>
         )}
+        </div>
 
         {count > 0 && !loading && showSuggestedChips && (
-          <div className="pt-2">
+          <div className="pt-2 max-w-3xl mx-auto w-full">
             <details className="group">
               <summary className="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer select-none flex items-center gap-1">
                 <span>Suggested prompts</span>
@@ -452,7 +461,8 @@ export default function ChatView({
       </div>
 
       {/* Composer Section */}
-      <div className={`p-3 border-t border-line bg-white shrink-0 ${embed && count === 0 ? 'hidden' : ''}`}>
+      <div className={`px-4 pt-2 pb-2 bg-paper shrink-0 ${embed && count === 0 ? 'hidden' : ''}`}>
+        <div className="max-w-3xl mx-auto w-full">
         {error && (
           <div className="mb-2 p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-1.5" role="alert">
             <AlertCircle size={14} className="shrink-0 text-red-600" />
@@ -482,7 +492,7 @@ export default function ChatView({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="relative flex items-end gap-1.5">
+        <form onSubmit={handleSubmit} className="relative flex items-end gap-1 rounded-2xl border border-line bg-white px-2 py-1.5 shadow-[0_6px_24px_-12px_rgba(23,37,29,0.25)] focus-within:border-slate-400">
           <input
             type="file"
             ref={fileInputRef}
@@ -500,7 +510,7 @@ export default function ChatView({
             title="Attach clinical image"
             aria-label="Attach clinical image"
           >
-            <Paperclip size={17} />
+            <Plus size={18} />
           </button>
 
           <textarea
@@ -510,24 +520,25 @@ export default function ChatView({
             disabled={loading}
             placeholder={count ? 'Ask follow-up or enter instruction…' : 'Ask anything, e.g. "Nearest ambulance to P001"'}
             rows={1}
-            className="flex-1 max-h-32 min-h-[38px] p-2 text-xs md:text-sm bg-paper border border-line rounded-xl focus:outline-none focus:border-slate-400 resize-none leading-relaxed text-ink placeholder:text-slate-400"
+            className="flex-1 max-h-32 min-h-[38px] px-1 py-2 text-[14.5px] bg-transparent border-0 focus:outline-none resize-none leading-relaxed text-ink placeholder:text-slate-400"
             style={{ height: 'auto', minHeight: '38px' }}
           />
 
           <button
             type="submit"
             disabled={loading || (!input.trim() && attachments.length === 0)}
-            className="p-2 rounded-xl bg-ink text-paper hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+            className="w-9 h-9 grid place-items-center rounded-full bg-ink text-paper hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0"
             title="Send message"
             aria-label="Send message"
           >
-            <Send size={16} />
+            <ArrowUp size={17} />
           </button>
         </form>
 
-        <p className="text-[10px] text-slate-400 text-center mt-2">
-          AI guidance only · Clinician confirms all actions & risk outputs
+        <p className="text-[11px] text-slate-400 text-center mt-1.5">
+          CliniQ is AI guidance only · a clinician confirms every action and risk output
         </p>
+        </div>
       </div>
     </div>
   );

@@ -22,13 +22,13 @@ export default function StepTimeline({ agentData, steps: providedSteps, isPendin
 
   return (
     <div
-      className="my-2.5 rounded-xl border border-line bg-surface/70 overflow-hidden text-xs"
+      className="rounded-xl border border-line bg-white overflow-hidden text-xs"
       data-testid="execution-timeline"
     >
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-slate-50/80 hover:bg-slate-100 transition-colors text-left font-medium text-slate-700"
+        className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-paper transition-colors text-left font-medium text-slate-700"
         aria-expanded={isOpen}
         data-testid="timeline-toggle"
       >
@@ -36,9 +36,13 @@ export default function StepTimeline({ agentData, steps: providedSteps, isPendin
           <span className="p-1 rounded-md bg-emerald-100 text-emerald-800">
             <Activity size={13} />
           </span>
-          <span className="font-semibold text-ink text-[12px]">
+          <span className="font-medium text-ink text-[13px]">
             Agent Execution Trace ({steps.length} steps)
           </span>
+          {!isOpen && (() => {
+            const tools = steps.map((st) => String(st.title || st.label || '')).filter((t) => /calling tool/i.test(t)).map((t) => t.replace(/calling tool\s*/i, ''));
+            return tools.length ? <span className="text-slate-400 font-normal truncate max-w-[260px]">· {tools.join(', ')}</span> : null;
+          })()}
         </div>
         <ChevronDown
           size={14}

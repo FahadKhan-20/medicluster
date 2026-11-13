@@ -6,7 +6,7 @@
   <title>CliniQ — MediCluster Agent</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-page: #000000;
@@ -33,26 +33,32 @@
     }
 
     [data-theme="light"] {
-      --bg-page: #e8e8ed;
-      --bg-side: #f4f4f7;
-      --bg-main: #ffffff;
-      --bg-card: #f4f4f7;
-      --bg-card-subtle: #e8e8ed;
+      /* MediCluster palette: ivory, sage, forest ink, copper */
+      --bg-page: #e9ede2;
+      --bg-side: #f3f5ee;
+      --bg-main: #fbfaf7;
+      --bg-card: #ffffff;
+      --bg-card-subtle: #eef2e8;
       --bg-dark-input: #ffffff;
-      --bg-subtle-dark: #e8e8ed;
-      --border-outer: #d0d0d7;
-      --border-main: #dcdce2;
-      --border-inner: #c4c4cd;
-      --border-subtle: #e2e2e8;
-      --text: #18181b;
-      --text-muted: #64748b;
-      --text-dim: #94a3b8;
-      --text-secondary: #334155;
-      --col-pass: #15803d;
-      --col-escalate: #b45309;
-      --col-block: #b91c1c;
-      --accent: #2563eb;
+      --bg-subtle-dark: #e7ecdf;
+      --border-outer: #dde3d4;
+      --border-main: #e2e8db;
+      --border-inner: #d3dcc8;
+      --border-subtle: #e8ede2;
+      --text: #17251d;
+      --text-muted: #5d6d56;
+      --text-dim: #9aa694;
+      --text-secondary: #2d3a31;
+      --col-pass: #2f7d4f;
+      --col-escalate: #b7791f;
+      --col-block: #b8453c;
+      --accent: #ad633f;
+      --font-sans: "Hanken Grotesk", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+      --chip-bg: #e2e9d9;
     }
+    :root { --chip-bg: #1d1d20; }
+    :root[data-theme="light"] { --chip-bg: #e2e9d9; }
+    [data-theme="light"] .tree-item-link .elbow-line { border-color: #b9c4b0; }
 
     html, body {
       margin: 0;
@@ -258,11 +264,11 @@
       cursor: pointer;
     }
     .foot-icon-link:hover {
-      background: #1d1d20;
+      background: var(--chip-bg);
       color: var(--text);
     }
     .foot-icon-link.active {
-      background: #1d1d20;
+      background: var(--chip-bg);
       color: var(--text);
     }
 
@@ -733,7 +739,7 @@
     }
     .prob-track {
       height: 6px;
-      background: #111113;
+      background: var(--bg-subtle-dark);
       border-radius: 999px;
       overflow: hidden;
       border: 1px solid var(--border-main);
@@ -1340,17 +1346,26 @@
             </div>
           </div>
 
-          <!-- CliniQ Chat -->
-          <a href="#" id="navChat" onclick="App.setView('chat'); return false;" style="display:flex; align-items:center; gap:10px; height:40px; margin-top:6px; padding:0 10px 0 12px; border-radius:10px; font-size:14px; color:var(--text);">
-            <span style="width:24px; height:24px; border-radius:6px; background:#1d1d20; display:grid; place-items:center;">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-            </span>
-            <span>Chat</span>
-          </a>
+          <!-- Group: Chat (CliniQ) -->
+          <div>
+            <button class="group-btn" onclick="App.toggleGroup('chat')">
+              <svg viewBox="0 0 8 14" width="8" height="14" fill="#8e8e96" style="margin:0 4px 0 2px;flex:none">
+                <circle cx="2" cy="2" r="1.2"></circle><circle cx="6" cy="2" r="1.2"></circle>
+                <circle cx="2" cy="7" r="1.2"></circle><circle cx="6" cy="7" r="1.2"></circle>
+                <circle cx="2" cy="12" r="1.2"></circle><circle cx="6" cy="12" r="1.2"></circle>
+              </svg>
+              <span style="font-weight:700; font-size:14.5px">Chat</span>
+              <span id="chatCountBadge" style="margin-left:auto; color:#8e8e96; font-size:12.5px; font-weight:600"></span>
+              <svg id="caretChat" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#8e8e96" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s">
+                <path d="m6 9 6 6 6-6"></path>
+              </svg>
+            </button>
+            <div id="treeChatList" class="tree-items-list"></div>
+          </div>
 
           <!-- New Audit Quick Trigger -->
           <a href="#" onclick="App.setView('home')" style="display:flex; align-items:center; gap:10px; height:40px; margin-top:6px; padding:0 10px 0 12px; border-radius:10px; font-size:14px; color:var(--text);">
-            <span style="width:24px; height:24px; border-radius:6px; background:#1d1d20; display:grid; place-items:center;">
+            <span style="width:24px; height:24px; border-radius:6px; background:var(--chip-bg); display:grid; place-items:center;">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
             </span>
             <span>Reprocess Scan</span>
@@ -1760,7 +1775,7 @@
       },
 
       initTheme() {
-        const saved = localStorage.getItem('medicluster_theme') || 'dark';
+        const saved = localStorage.getItem('medicluster_theme') || 'light';
         document.documentElement.setAttribute('data-theme', saved);
         document.getElementById('btnThemeToggle').textContent = saved === 'dark' ? '☀️' : '🌙';
       },
@@ -1790,8 +1805,8 @@
 
       toggleGroup(grp) {
         this.groupsOpen[grp] = !this.groupsOpen[grp];
-        const el = document.getElementById(grp === 'review' ? 'treeReviewList' : grp === 'history' ? 'treeHistoryList' : 'treeAgentsList');
-        const caret = document.getElementById(grp === 'review' ? 'caretReview' : grp === 'history' ? 'caretHistory' : 'caretAgents');
+        const el = document.getElementById(grp === 'review' ? 'treeReviewList' : grp === 'history' ? 'treeHistoryList' : grp === 'chat' ? 'treeChatList' : 'treeAgentsList');
+        const caret = document.getElementById(grp === 'review' ? 'caretReview' : grp === 'history' ? 'caretHistory' : grp === 'chat' ? 'caretChat' : 'caretAgents');
         if (el) el.classList.toggle('hidden', !this.groupsOpen[grp]);
         if (caret) caret.style.transform = this.groupsOpen[grp] ? 'none' : 'rotate(-90deg)';
       },
@@ -1841,6 +1856,7 @@
         this.showToast('Admin key cleared');
         this.renderSidebarAudits();
         this.renderSidebarAgents();
+        this.renderSidebarChat();
         this.renderAgentsView();
         this.renderLiveFeed();
       },
@@ -2084,6 +2100,44 @@
         this.renderLiveFeed();
         this.renderSidebarAudits();
         this.showToast('Showing all workflow events');
+      },
+
+      chatBranches: [
+        { id: 'new', label: 'New chat' },
+        { id: 'amb', label: 'Nearest ambulance', ask: 'Nearest ambulance to patient P001' },
+        { id: 'img', label: 'Imaging findings', ask: 'Latest imaging findings for P001' },
+        { id: 'why', label: 'Why did the agent alert?', ask: 'Why did the agent alert on P072?' },
+        { id: 'crit', label: 'Critical alerts', ask: 'Any critical alerts?' },
+        { id: 'sep', label: 'Sepsis risk', ask: 'Sepsis risk for P003' },
+        { id: 'cb', label: 'Code Blue drill', ask: 'Start Code Blue drill for DEMO-P001' },
+      ],
+
+      renderSidebarChat() {
+        const listEl = document.getElementById('treeChatList');
+        if (!listEl) return;
+        const n = this.chatBranches.length;
+        listEl.innerHTML = this.chatBranches.map((b, i) => {
+          const elbowStyle = i === n - 1 ? 'top:0; height:50%; border-left-color:#c9c9cf; border-bottom-color:#c9c9cf;' : 'top:0; height:50%;';
+          const active = this.view === 'chat' && this.chatActive === b.id;
+          return `
+            <a href="#" onclick="event.preventDefault(); App.openChat('${b.id}');" class="tree-item-link ${active ? 'active' : ''}" title="${this.escapeHtml(b.ask || 'Start a new conversation')}">
+              <span class="elbow-line" style="${elbowStyle}"></span>
+              <span style="${active ? 'color:var(--text); font-weight:600;' : ''}">${this.escapeHtml(b.label)}</span>
+            </a>`;
+        }).join('');
+      },
+
+      // Opens the Chat tab and drives the embedded CliniQ chat via postMessage.
+      openChat(branchId) {
+        const b = this.chatBranches.find(x => x.id === branchId) || this.chatBranches[0];
+        this.chatActive = b.id;
+        this.setView('chat');
+        const frame = document.getElementById('cqChatFrame');
+        const msg = b.ask ? { type: 'cliniq:ask', text: b.ask } : { type: 'cliniq:new' };
+        const send = () => { try { frame.contentWindow.postMessage(msg, new URL(frame.src).origin); } catch (e) { /* frame not ready */ } };
+        if (frame.dataset.ready === '1') send();
+        else frame.addEventListener('load', () => { frame.dataset.ready = '1'; setTimeout(send, 600); }, { once: true });
+        this.renderSidebarChat();
       },
 
       renderSidebarAgents() {
@@ -2538,6 +2592,7 @@
 
         if (v === 'chat') {
           const frame = document.getElementById('cqChatFrame');
+          if (!frame.src) frame.addEventListener('load', () => { frame.dataset.ready = '1'; }, { once: true });
           if (!frame.src) frame.src = window.CLINIQ_CHAT_URL || (location.protocol + '//' + location.hostname + ':3000/cliniq?embed=1');
           vChat.classList.remove('hidden');
           this.activeTabId = 'chat';
