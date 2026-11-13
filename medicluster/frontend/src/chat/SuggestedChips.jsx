@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Ambulance, FileSearch, ShieldAlert, AlertTriangle, HeartPulse, Zap } from 'lucide-react';
+import { Ambulance, FileSearch, ShieldAlert, AlertTriangle, HeartPulse, Zap } from 'lucide-react';
 
 export const SUGGESTED_PROMPTS = [
   {
@@ -43,10 +43,6 @@ export const SUGGESTED_PROMPTS = [
 export default function SuggestedChips({ onSelect, disabled = false, className = '' }) {
   return (
     <div className={`space-y-2 ${className}`} data-testid="suggested-chips">
-      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-        <Sparkles size={13} className="text-amber-600" />
-        <span>Suggested clinical queries:</span>
-      </div>
       <div className="flex flex-wrap gap-1.5">
         {SUGGESTED_PROMPTS.map((prompt) => {
           const Icon = prompt.icon;
