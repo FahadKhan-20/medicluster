@@ -1240,6 +1240,9 @@
     }
 
     .hidden { display: none !important; }
+    .view-container { position: relative; }
+    .chat-view { position:absolute; inset:0; display:flex; }
+    .chat-view iframe { flex:1; width:100%; height:100%; border:0; background:transparent; }
   </style>
 </head>
 <body>
@@ -1337,6 +1340,14 @@
             </div>
           </div>
 
+          <!-- CliniQ Chat -->
+          <a href="#" id="navChat" onclick="App.setView('chat'); return false;" style="display:flex; align-items:center; gap:10px; height:40px; margin-top:6px; padding:0 10px 0 12px; border-radius:10px; font-size:14px; color:var(--text);">
+            <span style="width:24px; height:24px; border-radius:6px; background:#1d1d20; display:grid; place-items:center;">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </span>
+            <span>Chat</span>
+          </a>
+
           <!-- New Audit Quick Trigger -->
           <a href="#" onclick="App.setView('home')" style="display:flex; align-items:center; gap:10px; height:40px; margin-top:6px; padding:0 10px 0 12px; border-radius:10px; font-size:14px; color:var(--text);">
             <span style="width:24px; height:24px; border-radius:6px; background:#1d1d20; display:grid; place-items:center;">
@@ -1360,6 +1371,9 @@
               <circle cx="7.5" cy="15.5" r="4.5"></circle>
               <path d="m11 12 9-9M17 6l3 3"></path>
             </svg>
+          </a>
+          <a href="#" id="navFootChat" class="foot-icon-link" onclick="App.setView('chat'); return false;" title="Chat with CliniQ">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
           </a>
           <a href="#" id="navFootKillSwitch" class="foot-icon-link" onclick="App.setView('settings:health')" title="Kill Switch & Health">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1490,6 +1504,9 @@
 
         <!-- VIEW: THREAD / AUDIT DETAIL -->
         <div id="viewThread" class="thread-view hidden"></div>
+
+        <!-- VIEW: CHAT (CliniQ chat, embedded dark) -->
+        <div id="viewChat" class="chat-view hidden"><iframe id="cqChatFrame" title="CliniQ chat" allow="geolocation; clipboard-write"></iframe></div>
 
         <!-- VIEW: AGENTS -->
         <div id="viewAgents" class="agents-view hidden">
@@ -2511,13 +2528,21 @@
         const vThread = document.getElementById('viewThread');
         const vAgents = document.getElementById('viewAgents');
         const vSettings = document.getElementById('viewSettings');
+        const vChat = document.getElementById('viewChat');
+        vChat.classList.add('hidden');
 
         vHome.classList.add('hidden');
         vThread.classList.add('hidden');
         vAgents.classList.add('hidden');
         vSettings.classList.add('hidden');
 
-        if (v === 'home') {
+        if (v === 'chat') {
+          const frame = document.getElementById('cqChatFrame');
+          if (!frame.src) frame.src = window.CLINIQ_CHAT_URL || (location.protocol + '//' + location.hostname + ':3000/cliniq?embed=1');
+          vChat.classList.remove('hidden');
+          this.activeTabId = 'chat';
+          if (!this.tabs.some(t => t.id === 'chat')) this.tabs.push({ id: 'chat', title: 'Chat' });
+        } else if (v === 'home') {
           vHome.classList.remove('hidden');
           this.activeTabId = 'home';
         } else if (v.startsWith('audit:')) {
@@ -3143,49 +3168,10 @@
     window.addEventListener('DOMContentLoaded', () => App.init());
   </script>
 
-  <!-- CliniQ chat drawer: the same chat as the MediCluster app (/cliniq), embedded next to the audit feed -->
-  <style>
-    #cqChatBtn{position:fixed;right:24px;bottom:24px;z-index:60;display:flex;align-items:center;gap:8px;height:48px;padding:0 18px;border-radius:24px;border:0;background:#7ee2a8;color:#0d1f15;font:600 14px/1 inherit;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-    #cqChatBtn:hover{filter:brightness(1.05)}
-    #cqChatDrawer{position:fixed;top:0;right:0;bottom:0;width:min(520px,100vw);z-index:70;background:var(--bg-panel,#1c1c1f);border-left:1px solid var(--border-inner,#2a2a2e);box-shadow:-12px 0 32px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .2s ease;display:flex;flex-direction:column}
-    #cqChatDrawer.open{transform:none}
-    #cqChatDrawer header{display:flex;align-items:center;justify-content:space-between;gap:8px;height:52px;padding:0 14px;border-bottom:1px solid var(--border-inner,#2a2a2e);font-weight:700}
-    #cqChatDrawer header a,#cqChatDrawer header button{color:var(--text,#eee);background:none;border:0;font-size:13px;cursor:pointer;text-decoration:none}
-    #cqChatDrawer iframe{flex:1;width:100%;border:0;background:#fff}
-  </style>
-  <button id="cqChatBtn" type="button" aria-label="Open CliniQ chat" title="Ask CliniQ (Ctrl+K)">
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-    Chat with CliniQ
-  </button>
-  <aside id="cqChatDrawer" aria-label="CliniQ chat" aria-hidden="true">
-    <header>
-      <span>CliniQ chat</span>
-      <span style="display:flex;gap:14px;align-items:center">
-        <a id="cqChatPopout" target="_blank" rel="noopener">Open full screen ↗</a>
-        <button id="cqChatClose" type="button" aria-label="Close chat">✕</button>
-      </span>
-    </header>
-    <iframe id="cqChatFrame" title="CliniQ chat" loading="lazy"></iframe>
-  </aside>
   <script>
-    (function () {
-      // Chat lives in the MediCluster app (staff login + role-scoped tools). Default: same host, port 3000.
-      var url = window.CLINIQ_CHAT_URL || (location.protocol + '//' + location.hostname + ':3000/cliniq');
-      var drawer = document.getElementById('cqChatDrawer'), frame = document.getElementById('cqChatFrame');
-      document.getElementById('cqChatPopout').href = url;
-      function toggle(open) {
-        open = open === undefined ? !drawer.classList.contains('open') : open;
-        if (open && !frame.src) frame.src = url;
-        drawer.classList.toggle('open', open);
-        drawer.setAttribute('aria-hidden', String(!open));
-      }
-      document.getElementById('cqChatBtn').addEventListener('click', function () { toggle(); });
-      document.getElementById('cqChatClose').addEventListener('click', function () { toggle(false); });
-      document.addEventListener('keydown', function (e) {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); toggle(); }
-        if (e.key === 'Escape') toggle(false);
-      });
-    })();
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); App.setView('chat'); }
+    });
   </script>
 </body>
 </html>

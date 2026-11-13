@@ -123,3 +123,24 @@
   body.printing-report #report, body.printing-report #report * { visibility: visible; }
   body.printing-report #report { position: absolute; inset: 0 auto auto 0; width: 100%; max-width: none; }
 }
+
+/* CliniQ embedded in the agent console (/cliniq?embed=1): dark theme matching the console */
+.cq-dark { background: #18181b; color: #ececec; color-scheme: dark; }
+.cq-dark .bg-paper, .cq-dark .bg-paper\/90 { background-color: #18181b !important; }
+.cq-dark .bg-white, .cq-dark .bg-white\/90 { background-color: #232327 !important; }
+.cq-dark .bg-slate-50, .cq-dark .bg-slate-100, .cq-dark .bg-gray-50, .cq-dark .bg-gray-100 { background-color: #2c2c31 !important; }
+.cq-dark .hover\:bg-slate-100:hover, .cq-dark .hover\:bg-slate-200:hover, .cq-dark .hover\:bg-white:hover { background-color: #34343a !important; }
+.cq-dark .bg-ink { background-color: #ececec !important; color: #18181b !important; }
+.cq-dark .text-ink, .cq-dark .text-slate-900, .cq-dark .text-slate-800, .cq-dark .text-gray-900 { color: #ececec !important; }
+.cq-dark .text-slate-700, .cq-dark .text-slate-600, .cq-dark .text-gray-700 { color: #c4c4c8 !important; }
+.cq-dark .text-slate-500, .cq-dark .text-slate-400 { color: #8e8e95 !important; }
+.cq-dark .border-line, .cq-dark .border-line-strong, .cq-dark .border-slate-200, .cq-dark .border-gray-200 { border-color: #33333a !important; }
+.cq-dark .bg-emerald-50, .cq-dark .bg-emerald-100 { background-color: #17352a !important; }
+.cq-dark .text-emerald-700, .cq-dark .text-emerald-800 { color: #7ee2a8 !important; }
+.cq-dark .border-emerald-200 { border-color: #24543f !important; }
+.cq-dark .bg-amber-50 { background-color: #3a2e14 !important; }
+.cq-dark .bg-red-50 { background-color: #3a1a1a !important; }
+.cq-dark textarea, .cq-dark select, .cq-dark input { color: #ececec; }
+.cq-dark select option { background: #232327; }
+.cq-dark [data-testid="suggested-chips"] button { background-color: #26262b !important; border-color: #33333a !important; padding: 8px 16px; font-size: 14px; }
+.cq-dark [data-testid="suggested-chips"] button:hover { background-color: #303036 !important; }

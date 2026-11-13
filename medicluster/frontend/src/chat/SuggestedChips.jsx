@@ -40,10 +40,10 @@ export const SUGGESTED_PROMPTS = [
   },
 ];
 
-export default function SuggestedChips({ onSelect, disabled = false, className = '' }) {
+export default function SuggestedChips({ onSelect, disabled = false, className = '', centered = false }) {
   return (
     <div className={`space-y-2 ${className}`} data-testid="suggested-chips">
-      <div className="flex flex-wrap gap-1.5">
+      <div className={`flex flex-wrap gap-1.5 ${centered ? 'justify-center gap-2' : ''}`}>
         {SUGGESTED_PROMPTS.map((prompt) => {
           const Icon = prompt.icon;
           return (

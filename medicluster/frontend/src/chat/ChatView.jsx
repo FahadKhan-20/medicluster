@@ -5,6 +5,8 @@ import SuggestedChips from './SuggestedChips';
 import StepTimeline from './StepTimeline';
 import {
   Send,
+  Plus,
+  ArrowUp,
   Paperclip,
   X,
   RotateCcw,
@@ -149,8 +151,14 @@ export function renderChatMarkdown(text) {
   return <div className="space-y-0.5">{elements}</div>;
 }
 
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
+
 export default function ChatView({
   isPanel = false,
+  embed = false,
   showSuggestedChips = true,
   onClose,
   className = '',
@@ -227,6 +235,7 @@ export default function ChatView({
       data-testid="chat-view"
     >
       {/* Top Header / Toolbar */}
+      {(!embed || count > 0) && (
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-line bg-paper/90 backdrop-blur-xs shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
@@ -286,6 +295,7 @@ export default function ChatView({
           )}
         </div>
       </div>
+      )}
 
       {/* Messages Scroll View */}
       <div
@@ -294,7 +304,48 @@ export default function ChatView({
         aria-live="polite"
         data-testid="chat-message-list"
       >
-        {count === 0 && (
+        {count === 0 && embed && (
+          <div className="min-h-full flex flex-col items-center justify-center px-4 pb-16" data-testid="chat-embed-hero">
+            <h1 className="text-4xl md:text-[44px] font-semibold tracking-tight text-ink mb-8">{greeting()}</h1>
+            <form onSubmit={handleSubmit} className="w-full max-w-3xl rounded-2xl bg-white border border-line px-5 pt-4 pb-3">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={loading}
+                autoFocus
+                rows={2}
+                placeholder="Ask CliniQ anything — patients, imaging, ambulances, alerts"
+                className="w-full bg-transparent resize-none text-[15px] leading-relaxed text-ink placeholder:text-slate-500 focus:outline-none"
+                aria-label="Ask CliniQ"
+              />
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {attachments.map((att, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-paper border border-line text-xs text-ink">
+                      <span className="max-w-[140px] truncate">{att.name}</span>
+                      <button type="button" onClick={() => removeAttachment(idx)} aria-label="Remove attachment"><X size={12} /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-ink py-1">
+                  <Plus size={16} /> Attach image
+                </button>
+                <button type="submit" disabled={loading || (!input.trim() && attachments.length === 0)} aria-label="Send message"
+                  className="w-9 h-9 rounded-full grid place-items-center bg-slate-100 text-ink hover:bg-slate-200 disabled:opacity-40">
+                  <ArrowUp size={17} />
+                </button>
+              </div>
+            </form>
+            {showSuggestedChips && (
+              <SuggestedChips className="mt-5 max-w-3xl" centered onSelect={(query) => handleChatSubmit(query)} disabled={loading} />
+            )}
+          </div>
+        )}
+
+        {count === 0 && !embed && (
           <div className="py-4 space-y-4">
             <div className="p-4 rounded-2xl bg-white border border-line space-y-2 text-center">
               <div className="inline-flex p-2.5 rounded-full bg-emerald-50 text-emerald-800 mb-1">
@@ -401,7 +452,7 @@ export default function ChatView({
       </div>
 
       {/* Composer Section */}
-      <div className="p-3 border-t border-line bg-white shrink-0">
+      <div className={`p-3 border-t border-line bg-white shrink-0 ${embed && count === 0 ? 'hidden' : ''}`}>
         {error && (
           <div className="mb-2 p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-1.5" role="alert">
             <AlertCircle size={14} className="shrink-0 text-red-600" />
