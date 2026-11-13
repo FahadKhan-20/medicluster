@@ -86,6 +86,10 @@ export default function ImagingDatasets() {
   const [benchmarkSplit, setBenchmarkSplit] = useState("test");
   const [selectedModel, setSelectedModel] = useState("");
 
+  const [showReferred, setShowReferred] = useState(false);
+  const [referredCount, setReferredCount] = useState(107);
+  const [identifiableCount, setIdentifiableCount] = useState(517);
+
   // Load datasets on mount
   useEffect(() => {
     let active = true;
@@ -97,9 +101,10 @@ export default function ImagingDatasets() {
         setDatasets(list);
         if (list.length > 0) {
           setActiveDatasetName(list[0].name);
-          if (list[0].compatibleModels?.length > 0) {
-            setSelectedModel(list[0].compatibleModels[0]);
-          }
+          const defaultModel = list[0].compatibleModels?.includes("densenet121-res224-all")
+            ? "densenet121-res224-all"
+            : list[0].compatibleModels?.[0] || "";
+          setSelectedModel(defaultModel);
         }
         setLoadingDatasets(false);
       })
@@ -118,27 +123,42 @@ export default function ImagingDatasets() {
   // Update selected model & load cached benchmark when active dataset changes
   useEffect(() => {
     if (activeDataset?.compatibleModels?.length > 0) {
-      setSelectedModel(activeDataset.compatibleModels[0]);
+      const defaultModel = activeDataset.compatibleModels.includes("densenet121-res224-all")
+        ? "densenet121-res224-all"
+        : activeDataset.compatibleModels[0];
+      setSelectedModel(defaultModel);
     }
     setSelectedClass("");
+    setShowReferred(false);
     setBenchmarkResult(null);
     setAnalysisResults({});
     setImportStatus({});
 
     if (activeDatasetName) {
-      runImagingDatasetBenchmark(activeDatasetName, { split: "test" })
+      const modelToBenchmark = activeDataset?.compatibleModels?.includes("densenet121-res224-all")
+        ? "densenet121-res224-all"
+        : activeDataset?.compatibleModels?.[0];
+      runImagingDatasetBenchmark(activeDatasetName, { split: "test", model: modelToBenchmark })
         .then((data) => setBenchmarkResult(data))
         .catch(() => {});
     }
   }, [activeDatasetName]);
 
   // Load samples
-  const fetchSamples = useCallback(async (datasetName, className) => {
+  const fetchSamples = useCallback(async (datasetName, className, isReferred) => {
     if (!datasetName) return;
     setLoadingSamples(true);
     try {
-      const res = await listImagingDatasetSamples(datasetName, { className, limit: 60 });
+      const isChest = datasetName === "chest-xray-pneumonia";
+      const res = await listImagingDatasetSamples(datasetName, {
+        className,
+        limit: 60,
+        identifiable: isChest ? !isReferred : undefined,
+        referred: isChest ? (isReferred ? true : undefined) : undefined,
+      });
       setSamples(res.samples || []);
+      if (res.referredCount !== undefined) setReferredCount(res.referredCount);
+      if (res.identifiableCount !== undefined) setIdentifiableCount(res.identifiableCount);
     } catch (err) {
       setError(err.response?.data?.error || "Failed to fetch dataset samples");
     } finally {
@@ -148,9 +168,9 @@ export default function ImagingDatasets() {
 
   useEffect(() => {
     if (activeDatasetName) {
-      fetchSamples(activeDatasetName, selectedClass);
+      fetchSamples(activeDatasetName, selectedClass, showReferred);
     }
-  }, [activeDatasetName, selectedClass, fetchSamples]);
+  }, [activeDatasetName, selectedClass, showReferred, fetchSamples]);
 
   // Analyze single sample
   const handleAnalyzeSample = async (sample) => {
@@ -422,6 +442,81 @@ export default function ImagingDatasets() {
                   </div>
                 </div>
 
+                {/* Selective Risk-Coverage Tradeoff Table */}
+                {benchmarkResult.metrics?.risk_coverage && (
+                  <div className="bg-paper rounded-lg border border-line p-4 flex flex-col gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="eyebrow block">Selective Prediction · Operating Point</span>
+                        <h5 className="font-serif text-base text-ink font-medium">
+                          Risk-Coverage Tradeoff (Abstain = "Refer to radiologist")
+                        </h5>
+                      </div>
+                      {benchmarkResult.metrics.selective && (
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                          <span className="bg-[#f4eee7] px-2 py-0.5 rounded text-slate-700">
+                            Answered: <strong>{benchmarkResult.metrics.selective.n}</strong> ({((benchmarkResult.metrics.selective.coverage || 0) * 100).toFixed(1)}%)
+                          </span>
+                          <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded">
+                            Referred: <strong>{benchmarkResult.metrics.selective.referred}</strong>
+                          </span>
+                          <span className="bg-green-50 text-green-900 border border-green-200 px-2 py-0.5 rounded font-semibold">
+                            Accuracy: {((benchmarkResult.metrics.selective.accuracy || 0) * 100).toFixed(1)}%
+                          </span>
+                          <span className="bg-paper text-slate-700 border border-line px-2 py-0.5 rounded">
+                            Macro F1: {benchmarkResult.metrics.selective.macro_f1?.toFixed(3)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-slate-600">
+                      Images where model confidence falls inside the uncertainty band are abstained as <em>"Uncertain — refer to radiologist"</em>. Operating point abstains 10% on train hold-out to reach &gt;91% accuracy on identifiable test images.
+                    </p>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-line text-slate-500 font-mono text-[10px] uppercase">
+                            <th className="py-2 font-medium">Target Refer %</th>
+                            <th className="py-2 font-medium">Coverage</th>
+                            <th className="py-2 font-medium">Answered (n)</th>
+                            <th className="py-2 font-medium">Referred</th>
+                            <th className="py-2 font-medium">Accuracy</th>
+                            <th className="py-2 font-medium">Macro F1</th>
+                            <th className="py-2 font-medium text-right">AUROC</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {benchmarkResult.metrics.risk_coverage.map((row) => {
+                            const isOperating = row.target_refer === 10;
+                            return (
+                              <tr
+                                key={row.target_refer}
+                                className={`border-b border-line/50 font-mono ${
+                                  isOperating
+                                    ? "bg-amber-50/70 font-semibold text-ink"
+                                    : "hover:bg-sunken/40 text-slate-700"
+                                }`}
+                              >
+                                <td className="py-2 font-medium">
+                                  {row.target_refer}% {isOperating ? "★ (Operating point)" : row.target_refer === 0 ? "(All images)" : ""}
+                                </td>
+                                <td className="py-2">{(row.coverage * 100).toFixed(1)}%</td>
+                                <td className="py-2">{row.n}</td>
+                                <td className="py-2 text-amber-700">{row.referred}</td>
+                                <td className="py-2 text-ink font-semibold">{(row.accuracy * 100).toFixed(1)}%</td>
+                                <td className="py-2">{row.macro_f1 != null ? row.macro_f1.toFixed(3) : "—"}</td>
+                                <td className="py-2 text-right">{row.auroc != null ? row.auroc.toFixed(3) : "—"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
                 {/* Per-Class Table & Confusion Matrix Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {/* Per-Class Performance Table */}
@@ -541,33 +636,51 @@ export default function ImagingDatasets() {
               </div>
             </div>
 
-            {/* Class Filter Tabs */}
-            <div className="flex flex-wrap gap-1.5 border-b border-line pb-2.5">
-              <button
-                type="button"
-                onClick={() => setSelectedClass("")}
-                className={`text-xs px-3 py-1 rounded-full border transition ${
-                  selectedClass === ""
-                    ? "bg-ink text-paper border-ink"
-                    : "bg-paper text-slate-600 border-line hover:border-slate-400"
-                }`}
-              >
-                All Classes ({activeDataset.counts?.total || samples.length})
-              </button>
-              {activeDataset.classes?.map((c) => (
+            {/* Class Filter Tabs & Referral Toggle */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-line pb-2.5">
+              <div className="flex flex-wrap gap-1.5">
                 <button
-                  key={c}
                   type="button"
-                  onClick={() => setSelectedClass(c)}
+                  onClick={() => setSelectedClass("")}
                   className={`text-xs px-3 py-1 rounded-full border transition ${
-                    selectedClass === c
+                    selectedClass === ""
                       ? "bg-ink text-paper border-ink"
                       : "bg-paper text-slate-600 border-line hover:border-slate-400"
                   }`}
                 >
-                  {c} {activeDataset.counts?.[c] ? `(${activeDataset.counts[c]})` : ""}
+                  All Classes ({activeDataset.counts?.total || samples.length})
                 </button>
-              ))}
+                {activeDataset.classes?.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setSelectedClass(c)}
+                    className={`text-xs px-3 py-1 rounded-full border transition ${
+                      selectedClass === c
+                        ? "bg-ink text-paper border-ink"
+                        : "bg-paper text-slate-600 border-line hover:border-slate-400"
+                    }`}
+                  >
+                    {c} {activeDataset.counts?.[c] ? `(${activeDataset.counts[c]})` : ""}
+                  </button>
+                ))}
+              </div>
+
+              {activeDatasetName === "chest-xray-pneumonia" && (
+                <button
+                  type="button"
+                  onClick={() => setShowReferred((prev) => !prev)}
+                  className={`text-xs px-3 py-1 rounded-full border font-mono transition ${
+                    showReferred
+                      ? "bg-amber-600 text-paper border-amber-700 shadow-sm font-medium"
+                      : "bg-paper text-slate-700 border-line hover:border-slate-400 font-medium"
+                  }`}
+                >
+                  {showReferred
+                    ? `Showing referred (${samples.length}) · Switch to Identifiable (${identifiableCount})`
+                    : `Show images the model refers (${referredCount})`}
+                </button>
+              )}
             </div>
 
             {/* Samples Grid */}
@@ -599,10 +712,13 @@ export default function ImagingDatasets() {
                           alt={s.filename}
                           className="w-full h-full object-cover"
                         />
-                        <span className="absolute top-1.5 left-1.5">
+                        <span className="absolute top-1.5 left-1.5 flex gap-1">
                           <Tag tone={s.class.toLowerCase().includes("normal") || s.class.toLowerCase().includes("no_tumor") ? "normal" : "high"}>
                             {s.class}
                           </Tag>
+                          {s.referred && (
+                            <Tag tone="high">Referred</Tag>
+                          )}
                         </span>
                       </div>
 
@@ -624,6 +740,10 @@ export default function ImagingDatasets() {
                           className={`p-2 rounded text-xs border ${
                             analysis.error
                               ? "bg-red-50 border-red-200 text-red-700"
+                              : analysis.status === "uncertain"
+                              ? "bg-amber-50 border-amber-200 text-amber-900"
+                              : analysis.status === "out_of_distribution"
+                              ? "bg-orange-50 border-orange-200 text-orange-900"
                               : analysis.matches
                               ? "bg-green-50 border-green-200 text-green-900"
                               : "bg-amber-50 border-amber-200 text-amber-900"
@@ -634,13 +754,23 @@ export default function ImagingDatasets() {
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               <div className="flex items-center justify-between font-medium">
-                                <span>Pred: {analysis.predicted}</span>
-                                <span className="font-mono text-[10px]">
-                                  {(analysis.score * 100).toFixed(0)}%
+                                <span className="truncate max-w-[170px]" title={analysis.predicted}>
+                                  Pred: {analysis.predicted}
                                 </span>
+                                {analysis.score != null && (
+                                  <span className="font-mono text-[10px]">
+                                    {(analysis.score * 100).toFixed(0)}%
+                                  </span>
+                                )}
                               </div>
                               <span className="text-[10px]">
-                                {analysis.matches ? "✓ Matches ground truth" : "✗ Disagrees with ground truth"}
+                                {analysis.status === "uncertain"
+                                  ? "Referred to radiologist"
+                                  : analysis.status === "out_of_distribution"
+                                  ? "Out of distribution"
+                                  : analysis.matches
+                                  ? "✓ Matches ground truth"
+                                  : "✗ Disagrees with ground truth"}
                               </span>
                             </div>
                           )}

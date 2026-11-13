@@ -1,12 +1,16 @@
 """Multi-model chest radiograph and single-frame DICOM analysis."""
 
 import io
+from pathlib import Path
+import json
+import joblib
 import numpy as np
 import torch
 import torchxrayvision as xrv
 from PIL import Image
 
 from clinical_knowledge import get_clinical_info
+from imaging.ood_gate import check_chest_ood
 
 # ── Model registry ────────────────────────────────────────────────────────────
 
@@ -47,6 +51,32 @@ DEFAULT_MODEL = "densenet121-res224-chex"
 _cache: dict = {}
 
 CONFIDENCE_THRESHOLD = 0.15
+
+PROBE_PATH = Path(__file__).resolve().parents[1] / "models_store" / "kermany_probe.joblib"
+SPLIT_PATH = Path(__file__).resolve().parents[1] / "datasets" / "imaging" / "identifiable_split.json"
+_PROBE_CACHE = None
+
+
+def _get_probe():
+    global _PROBE_CACHE
+    if _PROBE_CACHE is not None:
+        return _PROBE_CACHE
+    if PROBE_PATH.is_file():
+        try:
+            probe = joblib.load(PROBE_PATH)
+            threshold = 0.4738
+            band = 2.6952
+            if SPLIT_PATH.is_file():
+                try:
+                    split_info = json.loads(SPLIT_PATH.read_text())
+                    threshold = float(split_info.get("threshold", threshold))
+                    band = float(split_info.get("uncertain_band_logit", band))
+                except Exception:
+                    pass
+            _PROBE_CACHE = (probe, threshold, band)
+        except Exception:
+            _PROBE_CACHE = None
+    return _PROBE_CACHE
 
 
 def _is_medical_scan(arr: np.ndarray) -> str | None:
@@ -179,16 +209,67 @@ def analyze_image(
 
     arr, is_dicom = _load_pixels(image_bytes, filename)
 
-    # Validate image looks like a medical scan
+    # Validate image looks like a medical scan (inspect original colour channels if present)
     scan_warning = None
+    rgb_arr = None
     if not is_dicom:
-        rgb_arr = np.stack([arr, arr, arr], axis=-1) if arr.ndim == 2 else arr
-        if rgb_arr.dtype != np.uint8:
-            rgb_arr = np.clip(rgb_arr, 0, 255).astype(np.uint8)
-        scan_warning = _is_medical_scan(rgb_arr)
+        try:
+            raw_im = Image.open(io.BytesIO(image_bytes))
+            if raw_im.mode in ("RGB", "RGBA"):
+                rgb_arr = np.array(raw_im.convert("RGB"), dtype=np.uint8)
+                scan_warning = _is_medical_scan(rgb_arr)
+        except Exception:
+            rgb_arr = None
 
     model  = _get_model(model_name)
+    is_real_model = hasattr(model, "features2") or any(p in model_name for p in ("densenet", "resnet"))
+
+    # Initial OOD check for blank or non-medical photo scans
+    if is_real_model:
+        valid_initial, ood_reason = check_chest_ood(arr, rgb_arr=rgb_arr if not is_dicom else None)
+        if not valid_initial:
+            return {
+                "status": "out_of_distribution",
+                "message": ood_reason or "Not a chest X-ray — cannot analyze",
+                "error": ood_reason or "Not a chest X-ray — cannot analyze",
+                "findings": [],
+                "model": model_name,
+                "model_label": cfg["label"],
+                "confidence": 0.0,
+                "threshold": 0.4738,
+                "scan_warning": scan_warning or ood_reason,
+            }
     tensor = _preprocess(arr, cfg["size"], is_dicom)
+
+    # Penultimate features check for OOD and calibrated probe
+    features = None
+    if model_name == "densenet121-res224-all" and hasattr(model, "features2"):
+        with torch.no_grad():
+            features = model.features2(tensor).cpu().numpy()
+    elif "densenet121-res224-all" in XRV_MODELS:
+        try:
+            feat_model = _get_model("densenet121-res224-all")
+            feat_tensor = _preprocess(arr, 224, is_dicom)
+            with torch.no_grad():
+                features = feat_model.features2(feat_tensor).cpu().numpy()
+        except Exception:
+            features = None
+
+    # Feature-based OOD check (e.g. Brain MRI rejection)
+    if features is not None:
+        valid_features, feat_ood_reason = check_chest_ood(arr, features=features)
+        if not valid_features:
+            return {
+                "status": "out_of_distribution",
+                "message": feat_ood_reason or "Not a chest X-ray — cannot analyze",
+                "error": feat_ood_reason or "Not a chest X-ray — cannot analyze",
+                "findings": [],
+                "model": model_name,
+                "model_label": cfg["label"],
+                "confidence": 0.0,
+                "threshold": 0.4738,
+                "scan_warning": feat_ood_reason,
+            }
 
     with torch.no_grad():
         output = model(tensor)
@@ -202,9 +283,55 @@ def analyze_image(
         if label
     ]
 
-    findings = _attach_clinical_info(raw_findings, threshold=CONFIDENCE_THRESHOLD)
+    probe_info = _get_probe()
+    if probe_info is not None and features is not None:
+        probe, threshold, band = probe_info
+        pneu_prob = float(probe.predict_proba(features)[0, 1])
+        eps = 1e-6
+        logit_s = np.log((pneu_prob + eps) / (1.0 - pneu_prob + eps))
+        logit_t = np.log((threshold + eps) / (1.0 - threshold + eps))
+        dist = abs(logit_s - logit_t)
+
+        if dist <= band:
+            status = "uncertain"
+            confidence = round(pneu_prob, 4)
+            findings = [
+                {
+                    "label": "Uncertain — refer to radiologist",
+                    "confidence": confidence,
+                    "cause": "The image appearance is close to the decision threshold. Expert radiologist review is required.",
+                    "severity": "moderate",
+                    "medications": [],
+                    "prevention": [],
+                }
+            ]
+        else:
+            status = "ok"
+            is_pneumonia = pneu_prob >= threshold
+            confidence = round(pneu_prob if is_pneumonia else (1.0 - pneu_prob), 4)
+
+            # Update pneumonia confidence in raw findings with probe's calibrated probability
+            pneu_found = False
+            for f in raw_findings:
+                if f["label"].lower() in {"pneumonia", "consolidation", "infiltration"}:
+                    f["confidence"] = round(pneu_prob, 4)
+                    pneu_found = True
+            if not pneu_found and is_pneumonia:
+                raw_findings.append({"label": "Pneumonia", "confidence": round(pneu_prob, 4)})
+
+            findings = _attach_clinical_info(raw_findings, threshold=threshold)
+            if not findings and not is_pneumonia:
+                findings = []
+    else:
+        status = "ok"
+        threshold = CONFIDENCE_THRESHOLD
+        findings = _attach_clinical_info(raw_findings, threshold=threshold)
+        confidence = float(findings[0]["confidence"]) if findings else 0.0
 
     result = {
+        "status":      status,
+        "threshold":   round(threshold, 4),
+        "confidence":  round(confidence, 4),
         "findings":    findings,
         "model":       model_name,
         "model_label": cfg["label"],

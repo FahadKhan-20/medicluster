@@ -304,11 +304,13 @@ export async function listImagingDatasets() {
   return res.data;
 }
 
-export async function listImagingDatasetSamples(datasetName, { className, split, limit } = {}) {
+export async function listImagingDatasetSamples(datasetName, { className, split, limit, identifiable, referred } = {}) {
   const params = {};
   if (className) params.class = className;
   if (split) params.split = split;
   if (limit) params.limit = limit;
+  if (identifiable !== undefined) params.identifiable = identifiable;
+  if (referred !== undefined) params.referred = referred;
   const res = await api.get(`/media/datasets/${encodeURIComponent(datasetName)}/samples`, { params });
   return res.data;
 }

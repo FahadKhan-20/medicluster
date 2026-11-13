@@ -72,3 +72,25 @@ test('overlay boxes preserve original pixel coordinates and reject malformed reg
  const box={id:1,label:'Opacity',confidence:.8,x1:10,y1:20,x2:80,y2:120};
  assert.deepEqual(imaging.detectionBoxes({width:100,height:200,boxes:[box,{...box,x2:Infinity},{...box,x1:90},{...box,y2:201}]}),[box]);
 });
+
+test('out_of_distribution and uncertain statuses produce required labels and preserve custom threshold', () => {
+  const ood = imagingSummary({
+    model: 'densenet121-res224-all',
+    status: 'out_of_distribution',
+    findings: [],
+  });
+  assert.equal(ood.status, 'out_of_distribution');
+  assert.equal(ood.label, 'Not a chest X-ray — cannot analyze');
+  assert.equal(ood.caption, 'Out of distribution');
+
+  const uncertain = imagingSummary({
+    model: 'densenet121-res224-all',
+    status: 'uncertain',
+    threshold: 0.4738,
+    findings: [{ label: 'Pneumonia', confidence: 0.49 }],
+  });
+  assert.equal(uncertain.status, 'uncertain');
+  assert.equal(uncertain.label, 'Uncertain — refer to radiologist');
+  assert.equal(uncertain.caption, 'Referred to radiologist');
+  assert.equal(uncertain.threshold, 0.4738);
+});

@@ -33,6 +33,7 @@ function normalizePrediction(data) {
     ? data.heatmap_b64 : null;
   return {
     findings, model: MODEL_ID, model_label: MODEL.label, modality: MODEL.modality,
+    status: 'ok',
     prediction_label: data.label, is_tumor: data.is_tumor,
     gradcam_available: !!heatmap, heatmap_data_url: heatmap,
     analyzedAt: new Date(),

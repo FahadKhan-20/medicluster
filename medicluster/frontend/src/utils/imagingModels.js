@@ -7,17 +7,29 @@ export function hasImagingAnalysis(analysis) {
 }
 
 export function imagingSummary(analysis) {
+  const status = analysis?.status || 'ok';
   const findings = analysis?.findings || [];
   const top = findings.reduce((best, finding) => !best || finding.confidence > best.confidence ? finding : best, null);
   const isBrain = analysis?.modality === 'brain-mri' || analysis?.model === BRAIN_MRI_MODEL_ID;
   const isDetector = !isBrain && (analysis?.model === CHEST_DETECTOR_MODEL_ID || !!analysis?.localization);
-  const threshold = isDetector ? analysis?.localization?.threshold ?? .25 : .5;
+  const threshold = analysis?.threshold != null ? analysis.threshold : (isDetector ? analysis?.localization?.threshold ?? .25 : .5);
+  let label = isBrain ? analysis.prediction_label || top?.label || 'No classification' : isDetector ? top?.label || 'No regions detected' : top?.label || 'Clear';
+  let caption = isBrain ? 'Top model class' : isDetector ? top ? 'Detected finding' : 'Detection complete' : top && top.confidence >= threshold ? 'Likely finding' : 'No finding above threshold';
+
+  if (status === 'out_of_distribution') {
+    label = 'Not a chest X-ray — cannot analyze';
+    caption = 'Out of distribution';
+  } else if (status === 'uncertain') {
+    label = 'Uncertain — refer to radiologist';
+    caption = 'Referred to radiologist';
+  }
+
   return {
-    isBrain, isDetector, threshold, top,
+    status, isBrain, isDetector, threshold, top,
     model: analysis?.model || (isBrain ? BRAIN_MRI_MODEL_ID : 'densenet121-res224-all'),
     scanType: isBrain ? 'brain-mri' : 'chest-xray',
-    label: isBrain ? analysis.prediction_label || top?.label || 'No classification' : isDetector ? top?.label || 'No regions detected' : top?.label || 'Clear',
-    caption: isBrain ? 'Top model class' : isDetector ? top ? 'Detected finding' : 'Detection complete' : top && top.confidence >= .5 ? 'Likely finding' : 'No finding above threshold',
+    label,
+    caption,
   };
 }
 
