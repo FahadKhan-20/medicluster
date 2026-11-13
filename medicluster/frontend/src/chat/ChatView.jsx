@@ -157,6 +157,7 @@ function greeting() {
 export default function ChatView({
   isPanel = false,
   embed = false,
+  hero = false,
   showSuggestedChips = true,
   onClose,
   className = '',
@@ -244,6 +245,7 @@ export default function ChatView({
   };
 
   const count = messages.length;
+  const heroMode = embed || hero;
 
   return (
     <div
@@ -251,8 +253,8 @@ export default function ChatView({
       data-testid="chat-view"
     >
       {/* Top Header / Toolbar */}
-      {(!embed || count > 0) && (
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-line bg-paper/90 backdrop-blur-xs shrink-0">
+      {(!heroMode || count > 0) && (
+      <div className={`flex items-center justify-between py-2.5 border-b border-line bg-paper/90 backdrop-blur-xs shrink-0 ${heroMode ? "pl-14 pr-36 min-h-14" : "px-4"}`}>
         <div className="flex items-center gap-2 min-w-0">
           <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800 shrink-0">
             <Bot size={16} />
@@ -320,7 +322,7 @@ export default function ChatView({
         aria-live="polite"
         data-testid="chat-message-list"
       >
-        {count === 0 && embed && (
+        {count === 0 && heroMode && (
           <div className="min-h-full flex flex-col items-center justify-center px-4 pb-16" data-testid="chat-embed-hero">
             <h1 className="text-4xl md:text-[44px] font-semibold tracking-tight text-ink mb-8">{greeting()}</h1>
             <form onSubmit={handleSubmit} className="w-full max-w-3xl rounded-2xl bg-white border border-line px-5 pt-4 pb-3">
@@ -361,7 +363,7 @@ export default function ChatView({
           </div>
         )}
 
-        {count === 0 && !embed && (
+        {count === 0 && !heroMode && (
           <div className="py-4 space-y-4">
             {showSuggestedChips && (
               <SuggestedChips
@@ -461,7 +463,7 @@ export default function ChatView({
       </div>
 
       {/* Composer Section */}
-      <div className={`px-4 pt-2 pb-2 bg-paper shrink-0 ${embed && count === 0 ? 'hidden' : ''}`}>
+      <div className={`px-4 pt-2 pb-2 bg-paper shrink-0 ${heroMode && count === 0 ? 'hidden' : ''}`}>
         <div className="max-w-3xl mx-auto w-full">
         {error && (
           <div className="mb-2 p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-1.5" role="alert">
