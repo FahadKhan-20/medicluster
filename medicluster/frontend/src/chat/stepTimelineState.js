@@ -24,7 +24,7 @@ export function buildExecutionTrace(agentData, isPending = false) {
     id: 'understanding',
     label: 'Understanding request',
     status: 'completed',
-    detail: agentData?.model ? `Evaluated by ${agentData.model}` : 'Intent and parameters parsed',
+    detail: 'Intent and parameters parsed',
   });
 
   // Step 2..N: Tool calls
