@@ -25,7 +25,7 @@ test('buildExecutionTrace creates sequential trace: Understanding -> Tool Calls 
   assert.equal(trace.length, 3);
   assert.equal(trace[0].label, 'Understanding request');
   assert.equal(trace[0].status, 'completed');
-  assert.match(trace[0].detail, /medicluster-v1/);
+  assert.match(trace[0].detail, /Intent and parameters parsed/);
 
   assert.equal(trace[1].label, 'Calling tool nearby_ambulances');
   assert.equal(trace[1].status, 'completed');

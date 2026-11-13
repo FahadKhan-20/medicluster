@@ -9,7 +9,7 @@ import numpy as np
 import nibabel as nib
 from flask import Blueprint, request, jsonify, send_file
 from PIL import Image
-from scipy.ndimage import binary_fill_holes, binary_closing
+from scipy.ndimage import binary_fill_holes, binary_closing, binary_erosion, binary_opening, label as nd_label, sum as nd_sum, center_of_mass
 from runtime import ApiError, actor, create_record, owned_record, save_record, root_for, MODEL_LOCK
 from brain_geometry import load_volume, validate_points, build_mesh, GeometryError
 import brain_model
@@ -50,13 +50,55 @@ def study_fields(values):
     return {'patientId':patient, 'studyDate':study_date, 'name':text_value(values.get('name'),'name','MRI study')}
 
 
+def auto_seed(image):
+    """Brightest contrast-enhancing region inside the brain (how an enhancing tumour looks on T1c).
+    Returns a prompt point or None. A clinician still reviews the resulting candidate mask."""
+    try:
+        v = np.asarray(image.dataobj, dtype=np.float32)
+        if v.ndim != 3 or not (v > 0).any(): return None
+        brain = binary_erosion(binary_fill_holes(v > np.percentile(v[v > 0], 5)), iterations=6)
+        if brain.sum() < 1000: return None
+        bright = binary_opening(brain & (v > np.percentile(v[brain], 99.3)), iterations=1)
+        lab, n = nd_label(bright)
+        if n == 0: return None
+        sizes = nd_sum(bright, lab, range(1, n + 1))
+        if sizes.max() < 200: return None
+        c = center_of_mass(lab == int(np.argmax(sizes)) + 1)
+        return dict(zip(('x', 'y', 'z'), [float(round(x)) for x in c]), label=1)
+    except Exception:
+        return None
+
+
+def auto_segment(study_id, seed):
+    """Run SAM-Med3D from the seed right after the study is stored; failures leave the study unsegmented."""
+    try:
+        with MODEL_LOCK:
+            directory, record = owned_record('brain', study_id)
+            image = volume(directory)
+            points = validate_points([seed], image.shape)
+            mask = (brain_model.segment(image.get_fdata(dtype=np.float32), image.affine, points) > 0).astype(np.uint8)
+            if mask.shape != image.shape or not mask.any(): return None
+            out = nib.Nifti1Image(mask, image.affine); out.header.set_xyzt_units('mm')
+            target = directory / 'mask.pending.nii.gz'; nib.save(out, target); target.replace(directory / 'mask.nii.gz')
+            count = int(np.count_nonzero(mask))
+            record['segmentation'] = {'model': brain_model.MODEL_NAME, 'volumeMl': count * record['voxelVolumeMm3'] / 1000,
+                'voxelCount': count, 'points': points, 'createdAt': datetime.now(timezone.utc).isoformat(), 'prompted': True, 'auto': True,
+                'researchOnly': True, 'fieldOfViewMm': [192, 192, 192],
+                'description': 'Automatic candidate lesion: SAM-Med3D prompted at the brightest enhancing region; clinician review required; no histological classification'}
+            save_record(directory, record)
+            return public(record)
+    except Exception:
+        import logging; logging.getLogger(__name__).exception('auto segmentation failed')
+        return None
+
+
 def persist_image(image, values, source, seed=None):
     fields = study_fields(values)
     affine = image.affine
     fields.update(shape=list(image.shape), spacingMm=nib.affines.voxel_sizes(affine).tolist(),
         voxelVolumeMm3=float(abs(np.linalg.det(affine[:3,:3]))), source=source, segmentation=None)
     if seed is not None:
-        fields.update(suggestedPoint=seed, suggestedPointSource='Reference annotation derived demo seed; annotation is never supplied to the segmentation model')
+        fields.update(suggestedPoint=seed, suggestedPointSource=seed.pop('_source', 'Reference annotation derived demo seed; annotation is never supplied to the segmentation model'))
     directory, record = create_record('brain', fields)
     try:
         nib.save(image, directory / 'volume.nii.gz')
@@ -106,7 +148,14 @@ def create_demo():
                 point = nib.affines.apply_affine(np.linalg.inv(image.affine) @ reference.affine, index)
                 if np.all(point >= 0) and np.all(point < np.array(image.shape)):
                     seed = dict(zip(('x','y','z'),point.tolist()), label=1)
-        return jsonify(persist_image(image, data, 'UCSF-PDGM local research demo MRI', seed)), 201
+        if seed is None:
+            seed = auto_seed(image)
+            if seed is not None: seed['_source'] = 'Automatic: brightest contrast-enhancing region'
+        study = persist_image(image, data, 'UCSF-PDGM research MRI', dict(seed) if seed else None)
+        if seed is not None and data.get('autoSegment', True) is not False:
+            seed.pop('_source', None)
+            study = auto_segment(study['id'], seed) or study
+        return jsonify(study), 201
     except GeometryError as exc: raise ApiError(400,str(exc))
     except (ValueError, OSError, nib.filebasedimages.ImageFileError): raise ApiError(400,'Demo MRI could not be read')
 
@@ -123,7 +172,13 @@ def upload_study():
             path = Path(temporary) / ('upload'+suffix)
             uploaded.save(path)
             image = load_volume(path)
-            return jsonify(persist_image(image,request.form,'Uploaded MRI')),201
+            seed = auto_seed(image)
+            if seed is not None: seed['_source'] = 'Automatic: brightest contrast-enhancing region'
+            study = persist_image(image, request.form, 'Uploaded MRI', dict(seed) if seed else None)
+        if seed is not None and request.form.get('autoSegment', 'true') != 'false':
+            seed.pop('_source', None)
+            study = auto_segment(study['id'], seed) or study
+        return jsonify(study), 201
     except GeometryError as exc: raise ApiError(400,str(exc))
     except (ValueError, OSError, nib.filebasedimages.ImageFileError):
         raise ApiError(400, 'Invalid or unreadable NIfTI volume')
