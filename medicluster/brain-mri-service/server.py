@@ -12,6 +12,7 @@ Contract (medicluster/backend/services/brainMri.js):
 """
 from __future__ import annotations
 
+import base64
 import io
 import os
 from pathlib import Path
@@ -85,6 +86,51 @@ def run(batch: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
     return probs, feats
 
 
+def _class_score(batch: np.ndarray, key: str) -> float:
+    probs, feats = run(batch)
+    p = probe()
+    if p is not None and feats is not None and key != "No Tumor":
+        t = p["model"].predict_proba(feats[None])[0]
+        return float(t[["Glioma", "Meningioma", "Pituitary"].index(key)])
+    probs = np.clip(probs, 0, None)
+    return float(probs[KEYS.index(key)] / max(probs.sum(), 1e-9))
+
+
+def _jet(v: np.ndarray) -> np.ndarray:
+    r = np.clip(1.5 - np.abs(4 * v - 3), 0, 1)
+    g = np.clip(1.5 - np.abs(4 * v - 2), 0, 1)
+    b = np.clip(1.5 - np.abs(4 * v - 1), 0, 1)
+    return np.stack([r, g, b], -1)
+
+
+def occlusion_heatmap(data: bytes, key: str, grid: int = 14) -> str | None:
+    """Slide a grey patch over the slice; the drop in the predicted class score is the importance."""
+    try:
+        x = preprocess(data)
+        base = _class_score(x, key)
+        size = 224 // grid
+        heat = np.zeros((grid, grid), np.float32)
+        for i in range(grid):
+            for j in range(grid):
+                occ = x.copy()
+                occ[0, i * size:(i + 1) * size, j * size:(j + 1) * size, :] = 0.5
+                heat[i, j] = max(0.0, base - _class_score(occ, key))
+        if heat.max() <= 1e-6:
+            return None
+        heat = heat / heat.max()
+        hm = np.asarray(Image.fromarray((heat * 255).astype(np.uint8)).resize((224, 224), Image.BICUBIC), np.float32) / 255
+        rgb = (x[0] * 255).astype(np.float32)
+        alpha = (0.55 * hm)[..., None]
+        out = (rgb * (1 - alpha) + _jet(hm) * 255 * alpha).clip(0, 255).astype(np.uint8)
+        buf = io.BytesIO()
+        Image.fromarray(out).save(buf, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    except HTTPException:
+        raise
+    except Exception:
+        return None
+
+
 def classify(data: bytes) -> dict:
     """Original model decides tumor vs no tumor; the probe (trained on Figshare TRAIN) decides tumor type."""
     probs, feats = run(preprocess(data))
@@ -102,6 +148,7 @@ def classify(data: bytes) -> dict:
     pct = np.round(probs * 100, 4)
     pct[int(np.argmax(pct))] += round(100 - float(pct.sum()), 4)
     key = "No Tumor" if probs[2] > NO_TUMOR_GATE else KEYS[int(np.argmax(probs))]
+    heat = occlusion_heatmap(data, key) if os.getenv("BRAIN_HEATMAP", "1") != "0" else None
     return {
         "success": True,
         "label": LABELS[key],
@@ -109,7 +156,11 @@ def classify(data: bytes) -> dict:
         "probabilities": {k: float(v) for k, v in zip(KEYS, pct)},
         "uncertain": uncertain,
         "tumor_type_confidence": type_conf,
-        "explanation": {"available": False, "reason": "Grad-CAM not exported for this TFLite artifact"},
+        "explanation": (
+            {"available": True, "method": "occlusion", "reason": "Occlusion sensitivity: regions whose masking most lowers the predicted class. Model attention, not tumour boundaries."}
+            if heat else {"available": False, "reason": "Heatmap unavailable for this image"}
+        ),
+        **({"heatmap_b64": heat} if heat else {}),
         "model": source,
     }
 
