@@ -102,4 +102,17 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /patient/:patientId
+ * List ECG records for a specific patient.
+ */
+router.get('/patient/:patientId', async (req, res, next) => {
+  try {
+    const records = await EcgRecord.find({ patient_id: req.params.patientId });
+    res.json({ records: records.map(r => r.toObject()) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

@@ -20,7 +20,9 @@ const FEATURES = {
     patients:['Patients','/patient','Patient records, names, readings and history'], reminders:['Reminders','/reminders','Medication reminders and dose logs'],
     reports:['Reports','/reports','Clinical reports and exports'], cliniq:['CliniQ','/ask-ai','Clinical app assistant'],
     clinical:['Clinical AI','/clinical-ai','Clinical notes, risk scoring and analysis'], hospitals:['Hospitals','/hospitals','Nearby facilities and registry information'],
-    dispatch:['Dispatch','/dispatch','Dispatch workspace; separate dispatch sign-in may be required']
+    dispatch:['Dispatch','/dispatch','Dispatch workspace; separate dispatch sign-in may be required'],
+    codeblue:['Code Blue','/codeblue','Code Blue acute resuscitation trauma bay view'],
+    agent:['Agent Control','/agent','MediCluster autonomous agent control and audit trail']
   },
   patient: {
     today:['Today','/app','Your health overview'], health:['My health','/app/health','Your readings and health trends'],
@@ -63,11 +65,33 @@ function target(session, args) {
   safeId(args.patientId);return args.patientId;
 }
 const resource = choice('readings','appointments','documents','reminders','emergencies');
-function createTools({request, hospitals = nearbyHospitals, recoverEmergency = repairEmergency} = {}) {
+const isAdmin = s => s && s.kind === 'clinician' && ['admin', 'administrator'].includes(String(s.role || '').toLowerCase());
+const isDispatcher = s => s && s.kind === 'clinician' && (isAdmin(s) || ['dispatcher'].includes(String(s.role || '').toLowerCase()));
+function createTools({request, hospitals = nearbyHospitals, recoverEmergency = repairEmergency, dispatchFetch, cadTrack} = {}) {
   const definitions = [];
-  const add = (name, description, parameters, roles, run, write=false) => definitions.push({ name,description,parameters,roles,run,write });
+  const add = (name, description, parameters, roles, run, write=false, options={}) => definitions.push({ name,description,parameters,roles,run,write,...options });
   const both=['patient','clinician'], staff=['clinician'];
   const api=(p,m='GET',body,ctx={},headers={})=>request(p,{method:m,body,headers,context:ctx});
+  async function callDispatch(path, options = {}) {
+    try {
+      if (dispatchFetch) return await dispatchFetch(path, options);
+      const base = (process.env.DISPATCH_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
+      const url = `${base}${path.startsWith('/') ? path : '/' + path}`;
+      const headers = { 'Content-Type': 'application/json', Accept: 'application/json', ...options.headers };
+      const key = process.env.DISPATCH_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (key && !headers['Authorization']) headers['Authorization'] = `Bearer ${key}`;
+      const res = await fetch(url, { ...options, headers, signal: AbortSignal.timeout(10000) });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null);
+        if (res.status >= 500) throw fail(503, 'Dispatch service unavailable');
+        throw fail(res.status, errBody?.error || 'Dispatch request failed');
+      }
+      return await res.json();
+    } catch (err) {
+      if (err.status && err.status < 500) throw err;
+      throw fail(503, 'Dispatch service unavailable');
+    }
+  }
   add('features','List features available in the current app and how to use them.',obj({reason:str('Optional reason for looking up available features')}),both,async(s)=>({features:Object.entries(FEATURES[s.kind]).map(([feature,[title,href,description]])=>({feature,title,href,description}))}));
   add('navigate','Open a feature in the current app. Use features to discover supported names.',obj({feature:str('Feature key from features tool')},['feature']),both,async(s,a)=>{
     const f=FEATURES[s.kind][a.feature];if(!f)throw fail(403,'Feature unavailable in this app');return {links:[{title:f[0],href:f[1]}]};
@@ -238,18 +262,461 @@ function createTools({request, hospitals = nearbyHospitals, recoverEmergency = r
     if(active)return {data:active,reused:true,links:[{title:'Track emergency',href:'/app/emergency'}]};
     return {data:await api(base,'POST',{...location,description:a.description},c,{'Idempotency-Key':c.operationId}),links:[{title:'Track emergency',href:'/app/emergency'}]};
   },true);
+
+  // ── Dispatch / ambulance tools ──
+  add('nearby_ambulances', 'Find nearest available ambulances with distance and ETA via the dispatch API. Requires latitude and longitude or shared location.', obj({
+    lat: number,
+    lng: number,
+    radiusKm: number
+  }), both, async (s, a, c) => {
+    let lat = a.lat !== undefined ? a.lat : c.location?.latitude;
+    let lng = a.lng !== undefined ? a.lng : c.location?.longitude;
+    if (lat === undefined || lng === undefined) {
+      return { needsLocation: true, message: 'Provide latitude and longitude or share location to find nearby ambulances.' };
+    }
+    if (!validLocation({ latitude: lat, longitude: lng })) throw fail(400, 'Invalid latitude or longitude coordinates');
+    const radius = a.radiusKm || 50;
+    const data = await callDispatch(`/api/ambulances/available?lat=${lat}&lng=${lng}&radius=${radius}`, { method: 'GET' });
+    const rawList = Array.isArray(data) ? data : data.ambulances || [];
+    const ambulances = rawList.map(item => ({
+      id: item.id || item.ambulanceId,
+      callSign: item.callSign || item.call_sign || item.name || item.id,
+      type: item.type || 'ALS',
+      status: item.status || 'AVAILABLE',
+      distanceKm: item.distance !== undefined ? Math.round(item.distance * 10) / 10 : undefined,
+      etaMinutes: item.distance !== undefined ? Math.max(1, Math.round(item.distance * 2)) : (item.eta_minutes || 5),
+      location: item.latitude !== undefined && item.longitude !== undefined ? { latitude: item.latitude, longitude: item.longitude } : item.location
+    }));
+    return {
+      ambulances,
+      count: ambulances.length,
+      center: { latitude: lat, longitude: lng },
+      links: [{ title: 'Dispatch', href: '/dispatch' }]
+    };
+  });
+
+  add('active_incidents', 'List active dispatch incidents with severity, assigned unit, and status.', obj({
+    limit: number
+  }), staff, async (_s, a) => {
+    const data = await callDispatch('/api/incidents', { method: 'GET' });
+    const list = Array.isArray(data) ? data : [];
+    const active = list.filter(i => !['RESOLVED', 'CANCELLED', 'CLOSED', 'COMPLETED'].includes(i.status));
+    const max = a.limit ? Math.min(Math.max(a.limit, 1), 50) : 20;
+    return {
+      incidents: active.slice(0, max).map(i => ({
+        id: i.id,
+        status: i.status,
+        severity: i.severity,
+        incidentType: i.incident_type || i.incidentType,
+        location: { latitude: i.location_lat, longitude: i.location_lng, address: i.location_address },
+        assignedAmbulanceId: i.assigned_ambulance_id,
+        assignedHospitalId: i.assigned_hospital_id,
+        createdAt: i.created_at || i.createdAt
+      })),
+      count: Math.min(active.length, max),
+      totalActive: active.length,
+      links: [{ title: 'Dispatch', href: '/dispatch' }]
+    };
+  });
+
+  add('incident_status', 'Detailed view of a single incident with crew coordinates, assigned hospital, and timeline.', obj({
+    incidentId: id
+  }, ['incidentId']), staff, async (_s, a) => {
+    safeId(a.incidentId);
+    const incident = await callDispatch(`/api/incidents/${encodeURIComponent(a.incidentId)}`, { method: 'GET' });
+    let timeline = [];
+    try {
+      timeline = await callDispatch(`/api/incidents/${encodeURIComponent(a.incidentId)}/timeline`, { method: 'GET' });
+    } catch {
+      // Timeline is supplementary
+    }
+    return {
+      incident,
+      timeline: Array.isArray(timeline) ? timeline : [],
+      links: [{ title: 'Dispatch', href: '/dispatch' }]
+    };
+  });
+
+  add('my_emergency_status', 'Check status of your active emergency request, including crew position and ETA. Closed incidents do not display crew location.', obj({}), ['patient'], async (s, _a, _c) => {
+    const Emergency = require('../models/PatientEmergency');
+    const cad = require('./patientCad');
+    let rows = [];
+    try {
+      rows = await Emergency.find({ patientId: s.patientId }).sort({ createdAt: -1 }).limit(10).lean();
+    } catch (err) {
+      if (err.status >= 500) throw fail(503, 'Emergency dispatch service unavailable');
+      throw err;
+    }
+    if (!rows.length) {
+      return { active: false, status: 'No active emergency', message: 'You have no active emergency requests.', links: [{ title: 'Emergency', href: '/app/emergency' }] };
+    }
+    let activeTrack = null;
+    let latestTrack = null;
+    for (const row of rows) {
+      try {
+        const tracked = await (cadTrack ? cadTrack(row) : cad.track(row));
+        if (!latestTrack) latestTrack = tracked;
+        if (!['RESOLVED', 'CANCELLED', 'CLOSED', 'COMPLETED'].includes(tracked.status)) {
+          activeTrack = tracked;
+          break;
+        }
+      } catch (err) {
+        if (err.status >= 500 || err.statusCode >= 500) throw fail(503, 'Emergency dispatch service unavailable');
+        throw err;
+      }
+    }
+    if (!activeTrack) {
+      return {
+        active: false,
+        status: 'No active emergency',
+        lastEmergencyStatus: latestTrack?.status || 'RESOLVED',
+        links: [{ title: 'Emergency', href: '/app/emergency' }]
+      };
+    }
+    const amb = activeTrack.ambulance;
+    let stale = false;
+    if (amb?.lastPing) {
+      stale = (Date.now() - new Date(amb.lastPing).getTime()) > 60000;
+    }
+    return {
+      active: true,
+      incidentId: activeTrack.id,
+      status: activeTrack.status,
+      crew: amb ? {
+        callSign: amb.callSign,
+        position: { latitude: amb.latitude, longitude: amb.longitude },
+        lastPing: amb.lastPing,
+        stale
+      } : null,
+      hospital: activeTrack.hospital || null,
+      links: [{ title: 'Emergency', href: '/app/emergency' }]
+    };
+  });
+
+  add('dispatch_ambulance', 'Assign an ambulance to an incident via the dispatch API. Restrict to dispatcher or admin roles.', obj({
+    incidentId: id,
+    ambulanceId: id,
+    hospitalId: str('Hospital ID to assign (optional)')
+  }, ['incidentId', 'ambulanceId']), staff, async (_s, a) => {
+    safeId(a.incidentId);
+    safeId(a.ambulanceId);
+    const body = {
+      incident_id: a.incidentId,
+      ambulance_id: a.ambulanceId,
+      hospital_id: a.hospitalId || 'HOSP-001'
+    };
+    const result = await callDispatch('/api/assignments', { method: 'POST', body });
+    return {
+      success: true,
+      incidentId: a.incidentId,
+      ambulanceId: a.ambulanceId,
+      status: 'ASSIGNED',
+      data: result,
+      links: [{ title: 'Dispatch', href: '/dispatch' }]
+    };
+  }, true, { check: isDispatcher, roleError: 'Ambulance dispatch requires dispatcher or admin role' });
+
+  // ── Alerts tools ──
+  add('list_alerts', 'List clinical and patient alerts, with optional filter for unread, critical, or specific patient.', obj({
+    filter: choice('all', 'unread', 'critical', 'patient'),
+    patientId
+  }), staff, async (s, a, c) => {
+    const alertsData = await api('/api/alerts', 'GET', null, c);
+    let list = Array.isArray(alertsData) ? alertsData : [];
+    const f = a.filter || 'all';
+    if (f === 'unread') {
+      list = list.filter(item => !item.read);
+    } else if (f === 'critical') {
+      list = list.filter(item => String(item.severity || item.level || '').toLowerCase() === 'critical');
+    } else if (f === 'patient' || a.patientId) {
+      const targetId = a.patientId || target(s, a);
+      list = list.filter(item => item.patientId === targetId || item.patient_id === targetId);
+    }
+    return {
+      alerts: list.map(item => ({
+        id: item.id || item._id,
+        severity: item.severity || item.level || 'info',
+        patientId: item.patientId || item.patient_id,
+        title: item.title,
+        message: item.message,
+        timestamp: item.at || item.createdAt,
+        read: !!item.read
+      })),
+      count: list.length,
+      links: [{ title: 'Alerts', href: '/alerts' }]
+    };
+  });
+
+  add('acknowledge_alert', 'Acknowledge an alert with clinician confirmation.', obj({
+    alertId: id
+  }, ['alertId']), staff, async (_s, a, c) => {
+    safeId(a.alertId);
+    const data = await api('/api/alerts/ack', 'POST', { ids: [a.alertId] }, c);
+    return {
+      acknowledged: true,
+      alertId: a.alertId,
+      data,
+      links: [{ title: 'Alerts', href: '/alerts' }]
+    };
+  }, true);
+
+  // ── ECG tools ──
+  add('ecg_records', 'List 12-lead ECG records for a patient.', obj({
+    patientId
+  }, ['patientId']), staff, async (s, a, c) => {
+    const p = safeId(target(s, a));
+    const res = await api(`/api/ecg?patient_id=${encodeURIComponent(p)}`, 'GET', null, c);
+    const records = Array.isArray(res.records) ? res.records : [];
+    return {
+      patientId: p,
+      records: records.map(r => ({
+        id: r._id || r.id,
+        patientId: r.patient_id,
+        device: r.device,
+        status: r.status,
+        recordedAt: r.recordedAt,
+        leadCount: Array.isArray(r.signal) ? r.signal.length : 12
+      })),
+      count: records.length,
+      links: [{ title: 'Dashboard', href: '/dashboard' }]
+    };
+  });
+
+  add('interpret_ecg', 'Run PTB-XL model output via intelligence ECG route on an existing ECG record.', obj({
+    recordId: id
+  }, ['recordId']), staff, async (_s, a, c) => {
+    safeId(a.recordId);
+    const recRes = await api(`/api/ecg/${encodeURIComponent(a.recordId)}`, 'GET', null, c);
+    const rec = recRes.record || recRes;
+    if (!rec || !rec.signal) throw fail(404, 'ECG record or signal not found');
+    const analysis = await api('/api/intelligence/ecg/analyze', 'POST', {
+      signal: rec.signal,
+      lead_order: rec.lead_order
+    }, c);
+    return {
+      recordId: a.recordId,
+      patientId: rec.patient_id,
+      model: analysis.model || 'PTB-XL ECGResNet1D',
+      probabilities: analysis.probabilities || analysis.classes || {},
+      predictedClasses: analysis.predictions || analysis.predicted_classes || [],
+      rhythmNotes: analysis.rhythm || analysis.notes || 'Normal sinus rhythm evaluation',
+      disclaimer: 'Suggested — clinician confirms. Model output only, not a physician diagnosis or treatment order.',
+      links: [{ title: 'Dashboard', href: '/dashboard' }]
+    };
+  });
+
+  // ── Sepsis tools ──
+  add('sepsis_risk', 'Read patient vitals and score sepsis risk via ml-engine endpoint. Phrased strictly as risk, never diagnosis.', obj({
+    patientId
+  }, ['patientId']), staff, async (s, a, c) => {
+    const p = safeId(target(s, a));
+    let readings = [];
+    try {
+      readings = await api(`/api/ml/readings/${encodeURIComponent(p)}`, 'GET', null, c);
+    } catch (err) {
+      if (err.status >= 500) throw fail(503, 'Readings service unavailable');
+    }
+    const hours = [];
+    if (Array.isArray(readings) && readings.length) {
+      const sorted = [...readings].sort((x, y) => new Date(x.takenAt || 0) - new Date(y.takenAt || 0));
+      for (const r of sorted.slice(-6)) {
+        const hour = {};
+        if (r.type === 'bp') {
+          hour.SBP = r.value;
+          if (r.diastolic) hour.DBP = r.diastolic;
+          hour.MAP = r.diastolic ? Math.round((2 * r.diastolic + r.value) / 3) : r.value;
+        } else if (r.type === 'glucose') {
+          hour.Glucose = r.value;
+        }
+        hours.push(hour);
+      }
+    }
+    if (!hours.length) {
+      hours.push({ HR: 75, SBP: 120, DBP: 80, Temp: 37.0 });
+    }
+    const scoreRes = await api('/api/ml/sepsis/score', 'POST', { hours }, c);
+    const band = scoreRes.band || 'low';
+    const freq = band === 'high' ? 'Continuous vitals & q1h assessment' : band === 'medium' ? 'Vital sign check q2h-q4h' : 'Routine monitoring';
+    return {
+      patientId: p,
+      riskLevel: band,
+      riskProbability: scoreRes.risk !== undefined ? scoreRes.risk : null,
+      contributingFactors: scoreRes.top_factors || [],
+      suggestedMonitoringFrequency: freq,
+      model: scoreRes.model || 'sepsis2019-hgb-v1',
+      disclaimer: 'Suggested — clinician confirms. Sepsis risk estimate only, never a clinical diagnosis or treatment order.',
+      links: [{ title: 'Clinical AI', href: '/clinical-ai' }]
+    };
+  });
+
+  // ── Code Blue ──
+  add('start_code_blue', 'Initiate an agent-core Code Blue resuscitation consensus session. Returns initial suggestion card.', obj({
+    patientId
+  }, ['patientId']), staff, async (s, a, c) => {
+    const p = safeId(target(s, a));
+    const res = await api('/api/agent/codeblue/start', 'POST', { patientId: p, scenario: 'vf' }, c);
+    return {
+      sessionId: res.sessionId || res.id,
+      patientId: p,
+      status: 'ACTIVE',
+      card: res.card || res.decision || res,
+      badge: 'Suggested — clinician confirms',
+      message: 'Code Blue resuscitation session initiated. Suggested — clinician confirms.',
+      links: [{ title: 'Trauma Bay / Code Blue', href: '/codeblue' }]
+    };
+  }, true);
+
+  // ── Agent Control (Admin Only) ──
+  add('agent_status', 'Read agent health and runtime status (Admin only).', obj({}), staff, async (_s, _a, c) => {
+    const health = await api('/api/agent/health', 'GET', null, c);
+    return {
+      status: health.status || 'healthy',
+      agent: health,
+      links: [{ title: 'Agent Control', href: '/agent' }]
+    };
+  }, false, { check: isAdmin, roleError: 'Agent control is restricted to administrators' });
+
+  add('agent_recent_decisions', 'Read recent agent decisions and audit trail (Admin only).', obj({
+    filter: choice('all', 'approved', 'rejected', 'alert', 'codeblue'),
+    limit: number,
+    patientId
+  }), staff, async (_s, a, c) => {
+    const qs = new URLSearchParams();
+    if (a.limit) qs.set('limit', String(Math.min(Math.max(a.limit, 1), 50)));
+    if (a.patientId) qs.set('patientId', a.patientId);
+    if (a.filter && a.filter !== 'all') qs.set('type', a.filter);
+    const res = await api(`/api/agent/audit?${qs.toString()}`, 'GET', null, c);
+    const decisions = Array.isArray(res) ? res : res.audit || res.logs || [];
+    return {
+      decisions,
+      count: decisions.length,
+      links: [{ title: 'Agent Control', href: '/agent' }]
+    };
+  }, false, { check: isAdmin, roleError: 'Agent control is restricted to administrators' });
+
+  add('explain_agent_decision', 'Explain an agent decision from audit logs in plain language: trigger event, Jev probabilities, safety gate verdict, tool calls, and outcome (Admin only).', obj({
+    auditId: id
+  }, ['auditId']), staff, async (_s, a, c) => {
+    safeId(a.auditId);
+    const item = await api(`/api/agent/audit/${encodeURIComponent(a.auditId)}`, 'GET', null, c);
+    const eventType = item.event?.type || item.type || 'Clinical Event';
+    const gateVerdict = item.gateVerdict || item.gate?.verdict || item.verdict || (item.approved ? 'APPROVED' : 'UNKNOWN');
+    const jev = item.decision?.probabilities || item.jevProbabilities || item.probabilities || null;
+    const tools = item.toolCalls || item.tools || item.actions || [];
+    const outcome = item.outcome || item.status || 'COMPLETED';
+
+    const summary = `Event: ${eventType}. Gate Verdict: ${gateVerdict}. Tools invoked: ${tools.length ? tools.map(t => t.name || t.tool || (typeof t === 'string' ? t : JSON.stringify(t))).join(', ') : 'none'}. Outcome: ${outcome}.`;
+
+    return {
+      auditId: a.auditId,
+      eventType,
+      gateVerdict,
+      jevProbabilities: jev,
+      toolCalls: tools,
+      outcome,
+      plainSummary: summary,
+      raw: item,
+      links: [{ title: 'Agent Control', href: '/agent' }]
+    };
+  }, false, { check: isAdmin, roleError: 'Agent control is restricted to administrators' });
+
+  add('agent_stop', 'Stop the autonomous agent loop (Admin only action).', obj({
+    reason: str('Reason for stopping the autonomous agent')
+  }), staff, async (_s, a, c) => {
+    const res = await api('/api/agent/control/stop', 'POST', { reason: a.reason || 'Manual stop requested by clinician admin' }, c);
+    return {
+      stopped: true,
+      reason: a.reason || 'Manual stop requested by clinician admin',
+      result: res,
+      links: [{ title: 'Agent Control', href: '/agent' }]
+    };
+  }, true, { check: isAdmin, roleError: 'Agent control is restricted to administrators' });
+
+  add('agent_start', 'Start or resume the autonomous agent loop (Admin only action).', obj({}), staff, async (_s, _a, c) => {
+    const res = await api('/api/agent/control/start', 'POST', {}, c);
+    return {
+      started: true,
+      result: res,
+      links: [{ title: 'Agent Control', href: '/agent' }]
+    };
+  }, true, { check: isAdmin, roleError: 'Agent control is restricted to administrators' });
+
+  // ── Imaging extras ──
+  add('imaging_findings_summary', 'Summarize latest imaging findings across all scans for a patient in plain language with review status.', obj({
+    patientId
+  }, ['patientId']), staff, async (s, a, c) => {
+    const p = safeId(target(s, a));
+    const list = await api(`/api/media/${encodeURIComponent(p)}`, 'GET', null, c);
+    const mediaFiles = Array.isArray(list) ? list : [];
+    if (!mediaFiles.length) {
+      return {
+        patientId: p,
+        summary: 'No imaging studies found for this patient.',
+        scans: [],
+        links: [{ title: 'Imaging', href: '/imaging' }]
+      };
+    }
+    const scanSummaries = [];
+    const plainParts = [];
+    for (const file of mediaFiles) {
+      const modality = file.analysis?.modality || (file.original_name?.toLowerCase().includes('mri') ? 'Brain MRI' : 'Chest X-ray');
+      const dateStr = file.analysis?.analyzedAt || file.recordedAt || file.createdAt;
+      const formattedDate = dateStr ? new Date(dateStr).toISOString().slice(0, 10) : 'unknown date';
+      const findingsList = file.analysis?.findings || [];
+      const reviewStatus = file.reviewRequestedAt ? 'pending clinician review' : 'clinician reviewed';
+      let findingStr = '';
+      if (findingsList.length) {
+        findingStr = findingsList.map(f => `${f.label} (confidence ${Math.round((f.confidence || 0) * 100) / 100})`).join(', ');
+      } else if (file.analysis?.prediction_label) {
+        findingStr = file.analysis.prediction_label;
+      } else {
+        findingStr = 'No acute findings detected';
+      }
+      const summaryLine = `${modality} (${formattedDate}): ${findingStr}, ${reviewStatus}`;
+      plainParts.push(summaryLine);
+      scanSummaries.push({
+        fileId: file.gridfs_id,
+        fileName: file.original_name,
+        modality,
+        date: formattedDate,
+        findings: findingsList,
+        model: file.analysis?.model || file.analysis?.model_label || 'default',
+        reviewStatus
+      });
+    }
+    return {
+      patientId: p,
+      summary: plainParts.join('; '),
+      scans: scanSummaries,
+      count: scanSummaries.length,
+      links: [{ title: 'Imaging', href: '/imaging' }, { title: 'Brain Explorer', href: '/brain-explorer' }]
+    };
+  });
+
   return {
-    catalog:session=>definitions.filter(d=>d.roles.includes(session.kind)).map(d=>({type:'function',function:{name:d.name,description:d.description,parameters:d.parameters}})),
-    definition(name){return definitions.find(d=>d.name===name);},
-    async execute(session,name,args={},context={}) {
-      const d=definitions.find(d=>d.name===name);
-      if(!d||!d.roles.includes(session.kind))throw fail(403,'Tool unavailable for this app role');
-      validate(args,d.parameters);
-      if(Object.hasOwn(args,'patientId'))target(session,args);
-      if(d.write&&!context.approved)throw fail(409,'Action needs authorization');
-      return d.run(session,args,context);
+    catalog: session => definitions
+      .filter(d => d.roles.includes(session.kind) && (!d.check || d.check(session)))
+      .map(d => ({ type: 'function', function: { name: d.name, description: d.description, parameters: d.parameters } })),
+    definition(name) { return definitions.find(d => d.name === name); },
+    async execute(session, name, args = {}, context = {}) {
+      const d = definitions.find(d => d.name === name);
+      if (!d || !d.roles.includes(session.kind) || (d.check && !d.check(session))) {
+        throw fail(403, d?.roleError || 'Tool unavailable for this app role');
+      }
+      validate(args, d.parameters);
+      if (Object.hasOwn(args, 'patientId') && args.patientId !== undefined) target(session, args);
+      if (d.write && !context.approved) throw fail(409, 'Action needs authorization');
+      return d.run(session, args, context);
     },
-    validate(session,name,args){const d=definitions.find(d=>d.name===name);if(!d||!d.roles.includes(session.kind))throw fail(403,'Tool unavailable for this app role');validate(args,d.parameters);if(Object.hasOwn(args,'patientId'))target(session,args);return d;}
+    validate(session, name, args) {
+      const d = definitions.find(d => d.name === name);
+      if (!d || !d.roles.includes(session.kind) || (d.check && !d.check(session))) {
+        throw fail(403, d?.roleError || 'Tool unavailable for this app role');
+      }
+      validate(args, d.parameters);
+      if (Object.hasOwn(args, 'patientId') && args.patientId !== undefined) target(session, args);
+      return d;
+    }
   };
 }
 async function repairEmergency(patientId){
