@@ -477,6 +477,29 @@ describe("AgentLoop", () => {
     expect(Object.keys(sent.tool.schema.properties)).toEqual(["title", "summary"]);
   });
 
+  it("treats uncertain and out_of_distribution analyses as request_review, never alert", async () => {
+    for (const status of ["uncertain", "out_of_distribution"]) {
+      const doc = {
+        ...DOC,
+        analysis: {
+          ...DOC.analysis,
+          status,
+        },
+      };
+      // Jev rule is configured to choose "alert" with high confidence
+      const t = setup({
+        jev: new FakeJev(jevRules("alert", 0.99, 1, 0.99)),
+      });
+      const outcome = await t.loop.handle(analyzed(doc));
+      expect(outcome).toBe("executed");
+      // Must call /api/media/review, NEVER /api/alerts
+      expect(t.calls).toHaveLength(1);
+      expect(t.calls[0].path).toBe("/api/media/review/g1");
+      expect(t.calls[0].method).toBe("POST");
+      expect(t.calls.some((c) => c.path.includes("alert"))).toBe(false);
+    }
+  });
+
   // ---- fix round 2 ----
 
   it("concurrent reviews of the same event post one request_review", async () => {

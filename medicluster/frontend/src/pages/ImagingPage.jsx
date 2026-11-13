@@ -481,6 +481,16 @@ export default function ImagingPage() {
               <>
                 <span className="eyebrow">{summary.caption}</span>
                 <span className="font-serif text-[36px] leading-[1.05] tracking-[-0.02em]">{summary.label}</span>
+                {summary.status === 'out_of_distribution' && (
+                  <p className="text-[13px] text-amber-700 leading-normal">
+                    {visibleAnalysis.message || "Input is not a chest X-ray radiograph — analysis rejected."}
+                  </p>
+                )}
+                {summary.status === 'uncertain' && (
+                  <p className="text-[13px] text-amber-700 leading-normal">
+                    Model prediction falls in the uncertain abstention band. Referred for radiologist review.
+                  </p>
+                )}
                 {isDetector && <p className="text-[13px] text-slate-600 leading-normal">{visibleAnalysis.localization?.source || 'Pretrained chest finding detector'} · review required. Boxes mark candidate regions; an empty result does not establish a normal scan.</p>}
                 {summary.isBrain && <p className="text-[13px] text-slate-600 leading-normal">
                   Research model output; clinician review required. Grad-CAM shows model attention, not tumor boundaries.
@@ -493,7 +503,7 @@ export default function ImagingPage() {
           </div>
 
           </div>}
-          {resultTab === "findings" && <div className="imaging-result-body"><PathologyRows findings={findings} isBrain={isBrain} isDetector={isDetector} threshold={isDetector ? visibleAnalysis?.localization?.threshold ?? .25 : THRESHOLD} highlight={highlightedLabel} onHighlight={setHighlight} />
+          {resultTab === "findings" && <div className="imaging-result-body"><PathologyRows findings={findings} isBrain={isBrain} isDetector={isDetector} threshold={summary.threshold} highlight={highlightedLabel} onHighlight={setHighlight} />
           {findings && isDetector && <label className="flex gap-2 items-center text-xs"><input type="checkbox" checked={showRegions} onChange={event=>setShowRegions(event.target.checked)}/> Show finding regions · {visibleAnalysis.localization?.boxes?.length ?? 0} boxes</label>}
 
           </div>}

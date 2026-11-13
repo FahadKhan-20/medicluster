@@ -294,14 +294,22 @@ export class AgentLoop {
     }
     // Code-owned facts override any Gemini field of the same name.
     const stage: Stage = event.type === "scan.uploaded" ? "uploaded" : "analyzed";
-    const facts = { ...gemini.value, stage, has_analysis: isObject(doc.analysis) && !!doc.analysis.analyzedAt };
+    const status = isObject(doc.analysis) && typeof doc.analysis.status === "string" ? doc.analysis.status : "ok";
+    const facts = { ...gemini.value, stage, status, has_analysis: isObject(doc.analysis) && !!doc.analysis.analyzedAt };
     await this.step(c, "state", facts);
 
     const decision = await this.d.jev.decide(facts, JEV_QUESTIONS, "imaging");
     const { answers } = decision;
-    const action = answers.action?.choice ?? "";
-    const actionProb = answers.action?.probabilities?.[action] ?? 0;
-    const actNow = answers.act_now?.noul ?? 0;
+    let action = answers.action?.choice ?? "";
+    let actionProb = answers.action?.probabilities?.[action] ?? 0;
+    let actNow = answers.act_now?.noul ?? 0;
+
+    // Safety: uncertain or out-of-distribution analyses MUST be treated as request_review (never alert).
+    if (stage === "analyzed" && (status === "uncertain" || status === "out_of_distribution")) {
+      action = "request_review";
+      actionProb = 1;
+      actNow = 1;
+    }
     await this.step(c, "jev", { answers, fallback: decision.fallback, cost: decision.cost, error: decision.error });
 
     if (action === "ignore") return { outcome: "skipped", reason: "jev_ignore" };

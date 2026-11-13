@@ -251,6 +251,8 @@ router.get("/datasets/:name/samples", requireStaff, async (req, res, next) => {
     if (req.query.class) params.set("class", String(req.query.class));
     if (req.query.split) params.set("split", String(req.query.split));
     if (req.query.limit) params.set("limit", String(req.query.limit));
+    if (req.query.identifiable !== undefined) params.set("identifiable", String(req.query.identifiable));
+    if (req.query.referred !== undefined) params.set("referred", String(req.query.referred));
     const qs = params.toString() ? `?${params.toString()}` : "";
 
     const upstream = await axios.get(
@@ -586,6 +588,10 @@ Rules:
         model:        mlRes.data.model,
         model_label:  mlRes.data.model_label,
         scan_warning: mlRes.data.scan_warning || null,
+        status:       mlRes.data.status || "ok",
+        threshold:    mlRes.data.threshold,
+        confidence:   mlRes.data.confidence,
+        message:      mlRes.data.message || null,
         modality: mlRes.data.modality || "chest-xray",
         ...(model_name === DETECTOR_ID ? { localization: validateLocalization(mlRes.data.localization, mlRes.data.findings) } : {}),
         analyzedAt:   new Date(),

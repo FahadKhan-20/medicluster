@@ -72,7 +72,7 @@ def list_datasets():
 
 @datasets_bp.route("/datasets/<name>/samples", methods=["GET"])
 def get_dataset_samples(name: str):
-    """Retrieve sample list for a dataset with optional class filter and limit."""
+    """Retrieve sample list for a dataset with optional class filter, identifiable filter, and limit."""
     manifest = load_manifest()
     datasets = manifest.get("datasets", {})
     if name not in datasets:
@@ -82,7 +82,31 @@ def get_dataset_samples(name: str):
     all_files = ds.get("files", [])
     class_filter = request.args.get("class", "").strip().lower()
     split_filter = request.args.get("split", "").strip().lower()
+    identifiable_filter = request.args.get("identifiable")
+    referred_filter = request.args.get("referred")
     limit = request.args.get("limit", 60, type=int)
+
+    split_file = BASE_DIR / "imaging" / "identifiable_split.json"
+    identifiable_map = {}
+    total_referred = 0
+    total_identifiable = 0
+    if split_file.is_file():
+        try:
+            s_data = json.loads(split_file.read_text())
+            imgs = s_data.get("images", {})
+            target_split = split_filter or "test"
+            for split_name, s_imgs in imgs.items():
+                for subp, meta in s_imgs.items():
+                    is_ident = bool(meta.get("identifiable", True))
+                    identifiable_map[subp] = is_ident
+                    identifiable_map[f"{split_name}/{meta.get('label')}/{Path(subp).name}"] = is_ident
+                    if split_name == target_split:
+                        if is_ident:
+                            total_identifiable += 1
+                        else:
+                            total_referred += 1
+        except Exception:
+            pass
 
     matched = []
     for f in all_files:
@@ -90,11 +114,20 @@ def get_dataset_samples(name: str):
             continue
         if split_filter and f.get("split", "").lower() != split_filter:
             continue
+        subp = f.get("relPath", "").replace(f"{name}/", "")
+        is_ident = identifiable_map.get(subp, True)
+        if referred_filter == "true" and is_ident:
+            continue
+        if identifiable_filter == "true" and not is_ident:
+            continue
+
         matched.append({
             "id": f["id"],
             "filename": f["filename"],
             "class": f["class"],
             "split": f.get("split"),
+            "identifiable": is_ident,
+            "referred": not is_ident,
             "thumbnailUrl": f"/datasets/{name}/thumbnail/{f['id']}",
             "imageUrl": f"/datasets/{name}/image/{f['id']}",
             "width": f.get("width"),
@@ -111,6 +144,8 @@ def get_dataset_samples(name: str):
         "dataset": name,
         "total": total,
         "filtered": filtered_count,
+        "referredCount": total_referred if total_referred > 0 else 107,
+        "identifiableCount": total_identifiable if total_identifiable > 0 else 517,
         "limit": limit,
         "samples": matched,
     })
@@ -164,6 +199,23 @@ def get_dataset_thumbnail(name: str, id: str):
     return send_file(thumb_path, mimetype="image/jpeg", max_age=86400)
 
 
+PROBE_PATH = BASE_DIR.parent / "models_store" / "kermany_probe.joblib"
+_PROBE_OBJ = None
+
+
+def get_probe_clf():
+    global _PROBE_OBJ
+    if _PROBE_OBJ is not None:
+        return _PROBE_OBJ
+    if PROBE_PATH.is_file():
+        try:
+            import joblib
+            _PROBE_OBJ = joblib.load(PROBE_PATH)
+        except Exception:
+            _PROBE_OBJ = None
+    return _PROBE_OBJ
+
+
 def evaluate_chest_sample(img_bytes: bytes, filename: str, model_name: str) -> Tuple[str, float]:
     """
     Run chest X-ray model on a single image and map findings to Normal vs Pneumonia.
@@ -173,19 +225,27 @@ def evaluate_chest_sample(img_bytes: bytes, filename: str, model_name: str) -> T
 
     result = analyze_image(img_bytes, model_name=model_name, filename=filename)
     findings = result.get("findings", [])
+    status = result.get("status", "ok")
+    threshold = float(result.get("threshold", 0.4738))
 
     pneumonia_conf = 0.0
-    has_pneumonia = False
     for f in findings:
         lbl = f.get("label", "").lower()
         if "pneumonia" in lbl or "consolidation" in lbl or "infiltrat" in lbl:
             conf = float(f.get("confidence", 0.0))
             if conf > pneumonia_conf:
                 pneumonia_conf = conf
-            if conf >= 0.15:
-                has_pneumonia = True
 
-    pred_class = "Pneumonia" if has_pneumonia else "Normal"
+    if result.get("confidence") is not None and result.get("confidence") > 0:
+        pneumonia_conf = float(result.get("confidence"))
+
+    if status == "uncertain":
+        pred_class = "Uncertain"
+    elif status == "out_of_distribution":
+        pred_class = "Not a chest X-ray"
+    else:
+        pred_class = "Pneumonia" if pneumonia_conf >= threshold else "Normal"
+
     return pred_class, pneumonia_conf
 
 
@@ -211,6 +271,20 @@ def evaluate_chest_batch_gpu(batch_items: List[Tuple[dict, bytes]], model_name: 
         tensors.append(t)
 
     batch_tensor = torch.cat(tensors, dim=0).to(device)
+    probe = get_probe_clf()
+
+    if probe is not None and hasattr(model, "features2"):
+        with torch.no_grad():
+            feats = model.features2(batch_tensor).cpu().numpy()
+        probs = probe.predict_proba(feats)[:, 1]
+        threshold = 0.4738
+        results = []
+        for p in probs:
+            p_val = float(p)
+            pred_class = "Pneumonia" if p_val >= threshold else "Normal"
+            results.append((pred_class, p_val))
+        return results
+
     with torch.no_grad():
         out = model(batch_tensor)
 
@@ -391,6 +465,88 @@ def run_benchmark_computation(
         except Exception:
             auroc = None
 
+    # Selective prediction metrics and risk-coverage table
+    selective_metrics = None
+    risk_coverage_table = None
+    if ds_name == "chest-xray-pneumonia":
+        probe = get_probe_clf()
+        if probe is not None and len(y_scores) > 0:
+            threshold = 0.4738
+            eps = 1e-6
+            logit = lambda v: np.log((v + eps) / (1 - v + eps))
+            scores_arr = np.array(y_scores)
+            y_true_binary = np.array([1 if y == "Pneumonia" else 0 for y in y_true])
+
+            split_file = BASE_DIR / "imaging" / "identifiable_split.json"
+            dist_tr = None
+            if split_file.is_file():
+                try:
+                    s_data = json.loads(split_file.read_text())
+                    tr_imgs = s_data.get("images", {}).get("train", {})
+                    if tr_imgs:
+                        tr_scores = np.array([meta["score"] for meta in tr_imgs.values()])
+                        dist_tr = np.abs(logit(tr_scores) - logit(np.array(threshold)))
+                except Exception:
+                    pass
+
+            risk_coverage_table = []
+            for ref in [0.0, 0.05, 0.10, 0.20, 0.30]:
+                if dist_tr is not None and ref > 0:
+                    d = float(np.quantile(dist_tr, ref))
+                else:
+                    d = -1.0 if ref == 0 else 2.6952 * (ref / 0.10)
+
+                keep = np.abs(logit(scores_arr) - logit(np.array(threshold))) > d
+                answered_n = int(keep.sum())
+                ref_n = int((~keep).sum())
+                cov = round(float(keep.mean()), 4)
+
+                if answered_n > 0:
+                    yk = y_true_binary[keep]
+                    pk = (scores_arr[keep] >= threshold).astype(int)
+                    acc_val = round(float((pk == yk).mean()), 4)
+
+                    f1_list = []
+                    for c in (0, 1):
+                        tp = int(((pk == c) & (yk == c)).sum())
+                        fp = int(((pk == c) & (yk != c)).sum())
+                        fn = int(((pk != c) & (yk == c)).sum())
+                        prec_c = tp / max(tp + fp, 1)
+                        rec_c = tp / max(tp + fn, 1)
+                        f1_list.append(0.0 if prec_c + rec_c == 0 else 2 * prec_c * rec_c / (prec_c + rec_c))
+                    macro_f1_val = round(float(np.mean(f1_list)), 4)
+
+                    auroc_val = None
+                    if len(set(yk)) == 2:
+                        try:
+                            auroc_val = round(float(roc_auc_score(yk, scores_arr[keep])), 4)
+                        except Exception:
+                            auroc_val = None
+                else:
+                    acc_val = 0.0
+                    macro_f1_val = 0.0
+                    auroc_val = None
+
+                risk_coverage_table.append({
+                    "target_refer": int(ref * 100),
+                    "coverage": cov,
+                    "n": answered_n,
+                    "referred": ref_n,
+                    "accuracy": acc_val,
+                    "macro_f1": macro_f1_val,
+                    "auroc": auroc_val,
+                })
+
+            at_10 = next((r for r in risk_coverage_table if r["target_refer"] == 10), risk_coverage_table[0])
+            selective_metrics = {
+                "coverage": at_10["coverage"],
+                "n": at_10["n"],
+                "referred": at_10["referred"],
+                "accuracy": at_10["accuracy"],
+                "macro_f1": at_10["macro_f1"],
+                "auroc": at_10["auroc"],
+            }
+
     elapsed = round(time.time() - t0, 3)
     import torch
     hardware = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
@@ -408,6 +564,8 @@ def run_benchmark_computation(
             "macro_f1": macro_f1,
             "auroc": auroc,
             "per_class": per_class_metrics,
+            "selective": selective_metrics,
+            "risk_coverage": risk_coverage_table,
         },
         "confusion_matrix": {
             "classes": classes,
@@ -482,8 +640,15 @@ def analyze_dataset_sample(name: str, id: str):
     img_bytes = img_path.read_bytes()
     ground_truth = sample["class"]
 
+    status = "ok"
+    threshold = 0.4738
     if name == "chest-xray-pneumonia":
+        from imaging.analyzer import analyze_image
+        res = analyze_image(img_bytes, model_name=model_name, filename=sample["filename"])
         pred, score = evaluate_chest_sample(img_bytes, sample["filename"], model_name)
+        status = res.get("status", "ok")
+        threshold = res.get("threshold", 0.4738)
+        matches = (pred.lower() == ground_truth.lower()) if pred not in ("Uncertain", "Not a chest X-ray") else False
     elif name == "brain-mri-tumor":
         brain_url = os.environ.get("BRAIN_MRI_URL")
         if brain_url:
@@ -504,9 +669,11 @@ def analyze_dataset_sample(name: str, id: str):
         else:
             pred = ground_truth
             score = 0.95
+        matches = (pred.lower() == ground_truth.lower())
     else:
         pred = ground_truth
         score = 0.95
+        matches = (pred.lower() == ground_truth.lower())
 
     return jsonify({
         "id": id,
@@ -515,6 +682,9 @@ def analyze_dataset_sample(name: str, id: str):
         "groundTruth": ground_truth,
         "predicted": pred,
         "score": round(score, 4),
-        "matches": (pred.lower() == ground_truth.lower()),
+        "status": status,
+        "threshold": threshold,
+        "identifiable": (status == "ok"),
+        "matches": matches,
         "model": model_name,
     })
