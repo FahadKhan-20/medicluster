@@ -94,7 +94,10 @@ async function main(): Promise<void> {
   );
   const handle = work.wrap((e: Event) => loop.handle(e).then(() => undefined));
 
-  // Poll dispatch API every 10s for new PENDING incidents to feed dispatchWorkflow
+  // Poll dispatch API every 10s for new PENDING incidents to feed dispatchWorkflow.
+  // Each incident version is handled once: an unchanged PENDING incident already sits in Review,
+  // and re-handling it every poll flooded the audit log (one SOS logged 188 times in 30 minutes).
+  const seenIncidents = new Map<string, string>();
   const pollDispatch = work.wrap(async () => {
     if (health.isUp("dispatch") === false) return;
     try {
@@ -102,6 +105,10 @@ async function main(): Promise<void> {
       if (res.ok && Array.isArray(res.data)) {
         for (const inc of res.data) {
           if (inc && inc.id && inc.status === "PENDING" && !inc.assigned_ambulance_id) {
+            const version = String(inc.updated_at ?? inc.created_at ?? "");
+            if (seenIncidents.get(inc.id) === version) continue;
+            seenIncidents.set(inc.id, version);
+            if (seenIncidents.size > 5000) seenIncidents.delete(seenIncidents.keys().next().value as string);
             await dispatchWorkflow.handle({
               id: inc.id,
               type: "incident.pending",

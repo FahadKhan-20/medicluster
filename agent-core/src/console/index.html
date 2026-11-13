@@ -1956,7 +1956,7 @@
       async fetchAudits() {
         if (!this.adminKey) return;
         try {
-          const res = await fetch('/audit?limit=50', {
+          const res = await fetch('/audit?limit=200', {
             headers: { 'x-admin-key': this.adminKey }
           });
           if (res.status === 401) {
@@ -2265,18 +2265,33 @@
           return JSON.stringify(a).toLowerCase().includes(this.search);
         });
 
-        const pending = filtered.filter(a => a.outcome === 'pending' || a.outcome === 'review');
-        const history = filtered.filter(a => a.outcome !== 'pending' && a.outcome !== 'review');
+        // Collapse repeats of the same event (newest first) and show how many times it was logged.
+        const collapse = (list) => {
+          const seen = new Map();
+          for (const a of list) {
+            const key = (a.event?.type || '') + '|' + (a.event?.id || a._id);
+            if (seen.has(key)) seen.get(key)._repeats++;
+            else seen.set(key, Object.assign(Object.create(Object.getPrototypeOf(a)), a, { _repeats: 1 }));
+          }
+          return [...seen.values()];
+        };
+        const pending = collapse(filtered.filter(a => a.outcome === 'pending' || a.outcome === 'review'));
+        const history = collapse(filtered.filter(a => a.outcome !== 'pending' && a.outcome !== 'review'));
+        const wfName = this.workflowFilter ? (this.agents.find(w => w.id === this.workflowFilter)?.name || 'agent') : '';
 
         if (reviewBadge) reviewBadge.textContent = pending.length;
         if (historyBadge) historyBadge.textContent = history.length;
 
         const buildItems = (list) => {
-          if (!list.length) return '<div style="padding:6px 14px; font-size:12px; color:var(--text-dim);">None</div>';
+          if (!list.length) return wfName
+            ? `<div style="padding:6px 14px; font-size:12px; color:var(--text-dim);">None for ${this.escapeHtml(wfName)} · <a href="#" onclick="event.preventDefault(); App.clearWorkflowFilter()" style="color:#ad633f; text-decoration:underline;">show all</a></div>`
+            : '<div style="padding:6px 14px; font-size:12px; color:var(--text-dim);">None</div>';
           return list.map((a, i) => {
             const isLast = i === list.length - 1;
             const mid = a.event?.mediaId || a.event?.data?._id || a._id.slice(0, 8);
-            const title = `Scan ${mid} (${a.outcome || 'audit'})`;
+            const kind = String(a.event?.type || 'audit');
+            const label = kind.startsWith('incident.') ? 'Ambulance SOS' : kind.startsWith('reminder.') ? 'Missed dose' : kind.startsWith('media.') || kind.startsWith('scan') ? 'Scan' : kind.split('.')[0].replace(/^./, c => c.toUpperCase());
+            const title = `${label} ${String(mid).replace(/^(PAT-|dose:)/, '').slice(0, 8)}${a._repeats > 1 ? ' ×' + a._repeats : ''}`;
             const isActive = this.view === `audit:${a._id}`;
             const dotCol = a.outcome === 'executed' ? 'var(--col-pass)' : a.outcome === 'review' || a.outcome === 'pending' ? 'var(--col-escalate)' : 'var(--col-block)';
             return `
