@@ -19,52 +19,14 @@ import {
 } from 'lucide-react';
 import { DISPATCH_URL } from '../navigation';
 import { identifyResultCard } from './chatCardSelection';
+import MiniMap from './MiniMap';
 export { identifyResultCard };
 
 /**
  * Mini OpenStreetMap interactive/static preview card.
  */
-export function MiniOsmMap({ lat, lng, title = 'Location', zoom = 14, className = '' }) {
-  if (lat == null || lng == null || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
-    return null;
-  }
-  const numericLat = Number(lat);
-  const numericLng = Number(lng);
-  const osmUrl = `https://www.openstreetmap.org/?mlat=${numericLat.toFixed(5)}&mlon=${numericLng.toFixed(5)}#map=${zoom}/${numericLat.toFixed(5)}/${numericLng.toFixed(5)}`;
-  // OpenStreetMap embed URL
-  const bboxDelta = 0.008;
-  const bbox = [
-    (numericLng - bboxDelta).toFixed(5),
-    (numericLat - bboxDelta).toFixed(5),
-    (numericLng + bboxDelta).toFixed(5),
-    (numericLat + bboxDelta).toFixed(5),
-  ].join('%2C');
-  const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${numericLat.toFixed(5)}%2C${numericLng.toFixed(5)}`;
-
-  return (
-    <div className={`rounded-xl border border-line overflow-hidden bg-sunken/40 ${className}`} data-testid="mini-osm-map">
-      <div className="relative w-full h-[140px] bg-slate-100 flex items-center justify-center">
-        <iframe
-          title={title}
-          src={embedUrl}
-          className="w-full h-full border-0 pointer-events-auto"
-          loading="lazy"
-          tabIndex={-1}
-        />
-        <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-[11px] px-2 py-0.5 rounded shadow-sm border border-line flex items-center gap-1 font-mono">
-          <MapPin size={11} className="text-red-600" />
-          <span>{numericLat.toFixed(4)}, {numericLng.toFixed(4)}</span>
-        </div>
-      </div>
-      <div className="px-3 py-1.5 bg-white text-[11.5px] text-slate-500 flex justify-between items-center border-t border-line">
-        <span>OpenStreetMap</span>
-        <a href={osmUrl} target="_blank" rel="noopener noreferrer" className="text-accent-700 hover:underline flex items-center gap-1">
-          <span>Expand map</span>
-          <ExternalLink size={11} />
-        </a>
-      </div>
-    </div>
-  );
+export function MiniOsmMap(props) {
+  return <MiniMap {...props} />;
 }
 
 /**
@@ -103,14 +65,23 @@ export function AmbulanceListCard({ result }) {
         </Link>
       </div>
 
-      <MiniOsmMap lat={centerLat} lng={centerLng} title="Nearby Ambulances" />
+      <MiniOsmMap
+        lat={centerLat}
+        lng={centerLng}
+        title="Nearby Ambulances"
+        points={ambulances.slice(0, 4).map((a, i) => ({
+          lat: a.location?.latitude ?? a.latitude ?? a.lat,
+          lng: a.location?.longitude ?? a.longitude ?? a.lng,
+          label: `${i + 1}. ${a.callSign || a.callsign || a.vehicle_number || a.id || 'Unit'}`,
+        }))}
+      />
 
       {ambulances.length === 0 ? (
         <p className="text-xs text-slate-500 italic py-1">No ambulances currently available in this radius.</p>
       ) : (
         <div className="space-y-2">
           {ambulances.slice(0, 4).map((amb, i) => {
-            const id = amb.callsign || amb.vehicle_number || amb.ambulance_id || amb.id || `Unit #${i + 1}`;
+            const id = amb.callSign || amb.callsign || amb.vehicle_number || amb.ambulance_id || amb.id || `Unit #${i + 1}`;
             const type = amb.type || amb.capability || 'ALS';
             const dist = amb.distance ?? amb.distanceKm ?? amb.distance_km;
             const eta = amb.eta ?? amb.etaMinutes ?? (dist != null ? Math.max(3, Math.round(dist * 2.2)) : null);
@@ -119,7 +90,7 @@ export function AmbulanceListCard({ result }) {
             return (
               <div key={i} className="flex items-center justify-between p-2.5 rounded-xl border border-line bg-paper/60 hover:bg-paper transition-colors text-xs">
                 <div className="flex items-center gap-2.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="w-5 h-5 rounded-full bg-ink text-paper grid place-items-center text-[10px] font-bold">{i + 1}</span>
                   <div>
                     <span className="font-semibold text-ink">{id}</span>
                     <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-700 font-mono">{type}</span>

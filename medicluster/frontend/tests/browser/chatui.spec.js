@@ -280,7 +280,8 @@ test('chat launcher opens on /alerts, asks for nearest ambulance, renders map ca
 
   const miniMap = ambulanceCard.locator('[data-testid="mini-osm-map"]');
   await expect(miniMap).toBeVisible();
-  await expect(miniMap.locator('iframe')).toBeVisible();
+  await expect(miniMap.locator('.leaflet-container')).toBeVisible();
+  await expect(miniMap.locator('.mc-map-pin').first()).toBeVisible();
 
   // 6. Ask to acknowledge alert
   await composerInput.fill('Acknowledge alert ALT-101');
