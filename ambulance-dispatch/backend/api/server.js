@@ -54,7 +54,7 @@ function createApp(options = {}) {
   async function upstream(path, token, method = 'GET', body) {
     if (!validUrl || !key) throw fail(503, 'Supabase is not configured with a valid project URL');
     let response;
-    try { response = await fetch(`${url}${path}`, { method, headers: { apikey:key, ...(token ? {Authorization:`Bearer ${token}`} : {}), 'Content-Type':'application/json', Prefer:'return=representation' }, body:body === undefined ? undefined : JSON.stringify(body), signal:AbortSignal.timeout(10000), redirect:'error' }); }
+    try { response = await fetch(`${url}${path}`, { method, headers: { ...(typeof token === 'string' && token.startsWith('sb_secret_') ? {apikey:token} : {apikey:key, ...(token ? {Authorization:`Bearer ${token}`} : {})}), 'Content-Type':'application/json', Prefer:'return=representation' }, body:body === undefined ? undefined : JSON.stringify(body), signal:AbortSignal.timeout(10000), redirect:'error' }); }
     catch { throw fail(503, 'Supabase is unreachable'); }
     const data = await response.json().catch(() => null);
     if (!response.ok) {

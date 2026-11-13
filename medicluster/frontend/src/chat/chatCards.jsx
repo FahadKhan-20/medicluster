@@ -78,8 +78,12 @@ export function AmbulanceListCard({ result }) {
     ? data
     : [];
 
-  const centerLat = ambulances[0]?.latitude ?? ambulances[0]?.lat ?? data.location?.latitude ?? data.center?.lat ?? 37.7749;
-  const centerLng = ambulances[0]?.longitude ?? ambulances[0]?.lng ?? data.location?.longitude ?? data.center?.lng ?? -122.4194;
+  // Search centre first (what the user asked about), then the first unit; never a hardcoded city.
+  const first = ambulances[0] || {};
+  const centerLat = data.center?.latitude ?? data.center?.lat ?? data.location?.latitude ??
+    first.location?.latitude ?? first.latitude ?? first.lat ?? null;
+  const centerLng = data.center?.longitude ?? data.center?.lng ?? data.location?.longitude ??
+    first.location?.longitude ?? first.longitude ?? first.lng ?? null;
 
   return (
     <div className="rounded-2xl border border-line bg-white p-4 space-y-3.5 text-sm shadow-sm" data-testid="ambulance-list-card">
