@@ -20,7 +20,7 @@
 
 ### 2. Design Port & Fidelity (`parallel/console-design.md`)
 - **Exact Visual System from Claude Design Export (`Agent Auditor.dc.html`)**:
-  - Title: **Agent Auditor** with official shield-check SVG icon.
+  - Title: **CliniQ** with official shield-check SVG icon.
   - Typography: Google Fonts `Plus Jakarta Sans` (400, 500, 600, 700) and `JetBrains Mono` (400, 500).
   - Color palette: Pitch black (`#000000`), subtle cards (`#141416`, `#1c1c1f`, `#27272b`), borders (`#1f1f22`, `#2e2e33`), and accents (`#6fcf97` pass/green, `#e8b44a` review/yellow, `#e5655f` block/red).
   - Layout: Grid-based shell with collapsible left navigation sidebar (`268px minmax(0, 1fr)`), curved tree branches with elbow lines (`border-left` and `border-bottom-left-radius`), and tabbed workspace headers with close buttons.

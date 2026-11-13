@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Decision Replay has been implemented for the Agent Auditor console (`/console`). It allows clinical operators and auditors to step through agent decisions across 6 distinct evaluation stages:
+Decision Replay has been implemented for the CliniQ console (`/console`). It allows clinical operators and auditors to step through agent decisions across 6 distinct evaluation stages:
 1. **Event**: Ingestion metadata (event type, media ID, patient ID, event timestamp, raw event payload).
 2. **Gemini State**: Facts extracted by Gemini from clinical documents/scans.
 3. **Jev Decision & Probabilities**: Question evaluation with probability distribution bars, highlighted chosen option, Act-Now noul score, and red-flagged fallback banner with failure reasons.

@@ -7,6 +7,7 @@ groups:
   selfheal: auto
   dispatch: suggest
   builder: suggest
+  codeblue: auto
   ecg: auto
   sepsis: auto
   pharmacy: auto

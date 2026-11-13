@@ -1,5 +1,5 @@
 /**
- * Render & sanitization helpers for the Agent Auditor Console and Decision Replay.
+ * Render & sanitization helpers for the CliniQ Console and Decision Replay.
  * Guarantees that:
  * 1. All strings are safely HTML-escaped to prevent any XSS attacks.
  * 2. Large strings in tool args/results/state are truncated to 500 characters.
@@ -475,4 +475,59 @@ export function renderReplayStep(stepIndex: number, audit: any): string {
     default:
       return `<div class="replay-notice">Invalid step index: ${stepIndex}</div>`;
   }
+}
+
+export function renderWorkflowRow(wf: any): string {
+  const name = escapeHtml(wf?.name ?? "");
+  const desc = escapeHtml(wf?.description ?? "");
+  const status = escapeHtml(wf?.status ?? "not configured");
+  const policy = escapeHtml(wf?.policyLevel ?? wf?.policy ?? "off");
+  const reason = wf?.reason ? escapeHtml(wf.reason) : "";
+
+  let statusClass = "tag-subtle";
+  if (wf?.status === "active") statusClass = "tag-pass";
+  else if (wf?.status === "degraded") statusClass = "tag-escalate";
+  else if (wf?.status === "paused") statusClass = "tag-block";
+  else if (wf?.status === "not configured") statusClass = "tag-escalate";
+
+  const deps = wf?.deps || wf?.dependentServices || {};
+  const depsEntries = Object.entries(deps);
+  const depsHtml =
+    depsEntries.length > 0
+      ? depsEntries
+          .map(([dep, up]) => `<span class="dep-pill">${escapeHtml(dep)}: ${up ? "up" : "down"}</span>`)
+          .join(" ")
+      : "none";
+
+  const counts = wf?.counts24h || wf?.counts || {};
+  const countsText = `executed: ${counts.executed ?? 0}, review: ${counts.review ?? 0}, blocked: ${counts.blocked ?? 0}, failed: ${counts.failed ?? 0}`;
+  const lastEventText = wf?.lastEventAt ? `last: ${escapeHtml(wf.lastEventAt)}` : "no events";
+
+  return `
+    <div class="agent-row" data-workflow-id="${escapeHtml(wf?.id ?? "")}">
+      <div class="agent-info">
+        <div class="agent-title-row">
+          <span class="agent-name">${name}</span>
+          <span class="tag-badge ${statusClass}">${status}</span>
+          <span class="tag-badge tag-subtle">policy: ${policy}</span>
+        </div>
+        <div class="agent-desc">${desc}</div>
+        <div class="agent-meta">
+          <span>deps: ${depsHtml}</span>
+          <span>•</span>
+          <span>last 24h: ${escapeHtml(countsText)}</span>
+          <span>•</span>
+          <span>${lastEventText}</span>
+        </div>
+        ${reason ? `<div class="not-configured-alert">Not configured: ${reason}</div>` : ""}
+      </div>
+    </div>
+  `.trim();
+}
+
+export function renderWorkflowList(workflows: any[]): string {
+  if (!Array.isArray(workflows) || workflows.length === 0) {
+    return `<div class="empty-workflows">No workflows registered</div>`;
+  }
+  return `<div class="agents-table-box">${workflows.map(renderWorkflowRow).join("\n")}</div>`;
 }

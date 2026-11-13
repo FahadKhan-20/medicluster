@@ -9,6 +9,13 @@ import { rowToEvent } from "../events/events.js";
 import { getConsoleHtml } from "../console/index.js";
 import type { CodeBlueEngine } from "../codeblue/session.js";
 import { handleCodeBlueRoute } from "../codeblue/routes.js";
+import type { PolicyStore } from "../control/policy.js";
+import {
+  type WorkflowDescriptor,
+  deriveWorkflowStatus,
+  computeWorkflowMetrics,
+  getDefaultWorkflows,
+} from "../workflows/registry.js";
 
 export interface ServerDeps {
   audit: Pick<Audit, "list"> & { get?(id: string): Promise<any | null> };
@@ -19,6 +26,8 @@ export interface ServerDeps {
   adminKey: string;
   builder?: Pick<BuilderService, "handleTask">;
   codeblue?: CodeBlueEngine;
+  policyStore?: Pick<PolicyStore, "current">;
+  workflows?: WorkflowDescriptor[];
 }
 
 const MAX_BODY = 16 * 1024;
@@ -65,7 +74,7 @@ async function readJson(req: http.IncomingMessage): Promise<unknown> {
 }
 
 export function createServer(deps: ServerDeps): http.Server {
-  const { audit, state, loop, health, store, adminKey, builder } = deps;
+  const { audit, state, loop, health, store, adminKey, builder, policyStore, workflows } = deps;
 
   async function route(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -93,11 +102,56 @@ export function createServer(deps: ServerDeps): http.Server {
     }
 
     const isAuditGet = method === "GET" && (path === "/audit" || path.startsWith("/audit/"));
+    const isAgentsGet = method === "GET" && path === "/agents";
     const known =
       isAuditGet ||
+      isAgentsGet ||
       (method === "POST" && ["/control/stop", "/control/start", "/command", "/builder/task"].includes(path));
     if (!known) return send(res, 404, { error: "Not found" });
     if (!keyMatches(req.headers["x-admin-key"], adminKey)) return send(res, 401, { error: "Unauthorized" });
+
+    if (isAgentsGet) {
+      const isStopped = await state.isStopped();
+      const audits = await audit.list(undefined, 500).catch(() => []);
+      const policy = policyStore?.current?.() ?? { threshold: 0.9, groups: {}, rateLimitPerMinute: 30 };
+      const list = workflows ?? getDefaultWorkflows();
+
+      const result = list.map((wf) => {
+        const groupLevel = (policy.groups?.[wf.group] ?? "auto") as "off" | "suggest" | "auto";
+        const { status, reason } = deriveWorkflowStatus(wf, {
+          policyLevel: groupLevel,
+          isStopped,
+          health,
+        });
+        const metrics = computeWorkflowMetrics(wf, audits);
+        const depsStatus: Record<string, boolean> = {};
+        if (wf.deps) {
+          for (const d of wf.deps) {
+            depsStatus[d] = Boolean(health?.isUp?.(d));
+          }
+        }
+
+        return {
+          id: wf.id,
+          name: wf.name,
+          description: wf.description,
+          group: wf.group,
+          policyLevel: groupLevel,
+          policy: groupLevel,
+          registered: wf.registered !== false,
+          deps: depsStatus,
+          dependentServices: depsStatus,
+          lastEventAt: metrics.lastEventAt,
+          lastOutcome: metrics.lastOutcome,
+          counts: metrics.counts24h,
+          counts24h: metrics.counts24h,
+          status,
+          reason,
+        };
+      });
+
+      return send(res, 200, result);
+    }
 
     if (method === "GET" && path.startsWith("/audit/")) {
       const auditId = path.slice("/audit/".length);
