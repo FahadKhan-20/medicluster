@@ -1292,7 +1292,7 @@
               <circle cx="11" cy="11" r="7"></circle>
               <path d="m20 20-3.5-3.5"></path>
             </svg>
-            <input id="searchInput" type="search" autocomplete="off" placeholder="Search audits" aria-label="Search audits">
+            <input id="searchInput" name="mc-audit-search" type="search" autocomplete="off" data-lpignore="true" data-form-type="other" placeholder="Search audits" aria-label="Search audits">
           </label>
           <button id="btnNewScan" class="btn-action-round" title="New scan reprocess" aria-label="New audit">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
@@ -1570,7 +1570,7 @@
               <div class="setting-group">
                 <span class="setting-label">Policy Level</span>
                 <p class="setting-desc">Current policy level loaded from policy.yaml</p>
-                <input type="text" value="auto (execute >= 0.9, suggest < 0.9)" readonly style="width:100%; height:40px; padding:0 14px; border:1px solid var(--border-inner); border-radius:8px; background:var(--bg-dark-input); color:var(--text);">
+                <input type="text" value="auto (execute >= 0.9, suggest < 0.9)" readonly tabindex="-1" autocomplete="off" name="mc-gate-mode-display" style="width:100%; height:40px; padding:0 14px; border:1px solid var(--border-inner); border-radius:8px; background:var(--bg-dark-input); color:var(--text);">
               </div>
               <div class="setting-group">
                 <span class="setting-label">Treatment Actions Prohibition</span>
@@ -1735,6 +1735,9 @@
         this.initTheme();
         this.renderTabs();
         this.renderSidebarChat();
+        // Browsers sometimes autofill the search box; a stale filter hides every audit.
+        const clearSearch = () => { const el = document.getElementById('searchInput'); if (el && el.value && !el.matches(':focus')) { el.value = ''; this.search = ''; this.renderSidebarAudits && this.renderSidebarAudits(); this.renderLiveFeed && this.renderLiveFeed(); } };
+        clearSearch(); setTimeout(clearSearch, 400); setTimeout(clearSearch, 1500);
         this.updateKeyStatusUI();
         this.fetchHealth();
         if (this.adminKey) {
