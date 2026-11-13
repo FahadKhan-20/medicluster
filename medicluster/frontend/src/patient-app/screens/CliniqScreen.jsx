@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { cliniqChat } from "../../api/apiClient";
 import CliniqActions from "../../components/CliniqActions";
+import StepTimeline from "../../chat/StepTimeline";
 import { usePatient } from "../PatientApp";
 import { Eyebrow, ErrorNote } from "../ui";
 
@@ -224,6 +225,29 @@ export default function CliniqScreen() {
               Ask about your readings, reports, appointments or reminders. Find nearby hospitals,
               request emergency help, explore app features, or discuss a symptom or photo.
             </p>
+            <div className="flex flex-wrap gap-1.5 pt-2">
+              <button
+                type="button"
+                onClick={() => send(null, "Find nearby ambulances")}
+                className="px-3 py-1.5 rounded-full text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200"
+              >
+                Nearby ambulances
+              </button>
+              <button
+                type="button"
+                onClick={() => send(null, "Find nearby hospitals")}
+                className="px-3 py-1.5 rounded-full text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200"
+              >
+                Nearby hospitals
+              </button>
+              <button
+                type="button"
+                onClick={() => send(null, "What is my emergency status?")}
+                className="px-3 py-1.5 rounded-full text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200"
+              >
+                My emergency status
+              </button>
+            </div>
           </div>
         )}
 
@@ -238,6 +262,7 @@ export default function CliniqScreen() {
           ) : (
             <div key={i}>
               <AssistantReply text={m.content} doctor={profile?.nextVisit?.doctor} onShare={share} />
+              {m.agent && <StepTimeline agentData={m.agent} />}
               <CliniqActions data={m.agent} onSelect={text=>send(null,text)} onLocation={()=>{
                 const locationEpoch=epoch.current;
                 if(!navigator.geolocation){setError('Location unavailable. Open Emergency to set pickup location, or enter your city.');return;}

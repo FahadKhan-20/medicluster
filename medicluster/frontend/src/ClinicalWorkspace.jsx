@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import AppShell from "./components/AppShell";
+import { ChatProvider } from "./chat/ChatContext";
 import AlertsPage from "./pages/AlertsPage";
 import ReportsPage from "./pages/ReportsPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -15,9 +16,11 @@ import AgentPage from "./pages/AgentPage";
 
 const BrainExplorerPage = lazy(() => import("./pages/BrainExplorerPage"));
 const DeteriorationRadarPage = lazy(() => import("./pages/DeteriorationRadarPage"));
+const CliniqAppPage = lazy(() => import("./pages/CliniqAppPage"));
 
 export default function ClinicalWorkspace() {
   return (
+    <ChatProvider>
       <AppShell>
         <Suspense fallback={<p className="p-8">Loading workspace…</p>}>
         <Routes>
@@ -35,6 +38,7 @@ export default function ClinicalWorkspace() {
           <Route path="/reminders/:patientId" element={<RemindersPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/ask-ai" element={<AskAIPage />} />
+          <Route path="/cliniq" element={<CliniqAppPage />} />
           <Route path="/ml-tools" element={<Navigate to="/dashboard" replace />} />
           <Route path="/hospitals" element={<NearbyHospitalsPage />} />
           <Route path="/clinical-ai" element={<ClinicalAIPage />} />
@@ -42,5 +46,6 @@ export default function ClinicalWorkspace() {
         </Routes>
         </Suspense>
       </AppShell>
+    </ChatProvider>
   );
 }

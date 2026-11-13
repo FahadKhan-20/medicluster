@@ -14,6 +14,7 @@ import {
   Package,
   Bike,
   Bot,
+  MessageCircle,
 } from "lucide-react";
 import Logo from "../components/Logo";
 import ApplicationSelector from "../components/download/ApplicationSelector";
@@ -49,6 +50,7 @@ const ICONS = {
   package: Package,
   bike: Bike,
   bot: Bot,
+  cliniq: MessageCircle,
 };
 
 export default function DownloadPage() {

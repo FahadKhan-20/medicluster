@@ -20,5 +20,6 @@ export function buildAppCatalog(dispatchUrl, { allowLocal = false } = {}) {
     { id: 'crew', name: 'Crew app', description: 'Your shift, calls and patient handovers.', webHref: base ? `${base}/#/driver/login` : null, android: true, icon: 'ambulance' },
     { id: 'pharmacy', name: 'Pharmacy portal', description: 'Dispense orders, verify prescriptions and manage stock.', webHref: '/pharmacy', android: false, icon: 'pill' },
     { id: 'courier', name: 'Courier view', description: 'Deliveries, live GPS routing and handover OTPs.', webHref: '/courier', android: false, icon: 'truck' },
+    { id: 'cliniq', name: 'CliniQ', description: 'Every MediCluster feature in one chat.', webHref: '/cliniq', android: false, icon: 'cliniq' },
   ];
 }
