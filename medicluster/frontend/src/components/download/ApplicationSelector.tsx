@@ -5,8 +5,12 @@ import {
   Check,
   Download,
   HeartPulse,
+  Pill,
   RadioTower,
   Stethoscope,
+  Truck,
+  Package,
+  Bike,
 } from "lucide-react";
 import { createAndroidDownloader } from "@/patient-app/patientDownload";
 import type { PatientRelease, ProductApp } from "./appTypes";
@@ -16,6 +20,10 @@ const ICONS = {
   patient: HeartPulse,
   dispatch: RadioTower,
   crew: Ambulance,
+  pharmacy: Pill,
+  courier: Truck,
+  package: Package,
+  bike: Bike,
 };
 
 export default function ApplicationSelector({

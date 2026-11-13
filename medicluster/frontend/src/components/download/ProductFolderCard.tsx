@@ -15,6 +15,8 @@ const ART: Record<
   patient: { art: "glacier", tone: "light", seed: 7 },
   dispatch: { art: "ember", tone: "dark", seed: 11 },
   crew: { art: "verdant", tone: "light", seed: 19 },
+  pharmacy: { art: "dusk", tone: "light", seed: 23 },
+  courier: { art: "ember", tone: "light", seed: 29 },
 };
 
 export function productFolderFiles(
@@ -25,7 +27,16 @@ export function productFolderFiles(
   if (app.webHref)
     files.push({
       name: "Open web app",
-      meta: app.id === "patient" ? "Patient portal" : app.id === "crew" ? "Crew workspace" : "Web app",
+      meta:
+        app.id === "patient"
+          ? "Patient portal"
+          : app.id === "crew"
+            ? "Crew workspace"
+            : app.id === "pharmacy"
+              ? "Pharmacy portal"
+              : app.id === "courier"
+                ? "Courier view"
+                : "Web app",
       art: ART[app.id]?.art ?? "aurora",
       href: app.webHref,
     });

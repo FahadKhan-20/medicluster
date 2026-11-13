@@ -9,10 +9,16 @@ import {
   Heart,
   Route,
   Ambulance,
+  Pill,
+  Truck,
+  Package,
+  Bike,
+  Bot,
 } from "lucide-react";
 import Logo from "../components/Logo";
 import ApplicationSelector from "../components/download/ApplicationSelector";
 import CareArtifact from "../components/download/CareArtifact";
+import AgentSpotlight from "../components/download/AgentSpotlight";
 import {
   CareStory,
   PatientSpotlight,
@@ -38,6 +44,11 @@ const ICONS = {
   heart: Heart,
   route: Route,
   ambulance: Ambulance,
+  pill: Pill,
+  truck: Truck,
+  package: Package,
+  bike: Bike,
+  bot: Bot,
 };
 
 export default function DownloadPage() {
@@ -142,6 +153,9 @@ export default function DownloadPage() {
             <a className="mc-desktop-nav" href="#how-it-works">
               How it works
             </a>
+            <a className="mc-desktop-nav" href="#agent">
+              Agent
+            </a>
             <a className="mc-desktop-nav" href="#faq">
               FAQ
             </a>
@@ -170,7 +184,7 @@ export default function DownloadPage() {
               </div>
               <nav aria-label="Products" className="download-menu-list">
                 {APPS.map((app) => {
-                  const Icon = ICONS[app.icon];
+                  const Icon = ICONS[app.icon] || Stethoscope;
                   return (
                     <a
                       key={app.id}
@@ -186,6 +200,17 @@ export default function DownloadPage() {
                     </a>
                   );
                 })}
+                <a
+                  href="#agent"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <Bot size={21} aria-hidden="true" />
+                  <span>
+                    MediCluster Agent
+                    <small>Autonomous care orchestration across every app.</small>
+                  </span>
+                  <ArrowUpRight size={15} aria-hidden="true" />
+                </a>
               </nav>
               <div className="download-menu-note">
                 <span>Care, connected.</span>
@@ -264,6 +289,12 @@ export default function DownloadPage() {
             <a href="#dispatch">Dispatchers</a>
             <span aria-hidden="true">/</span>
             <a href="#crew">Crews</a>
+            <span aria-hidden="true">/</span>
+            <a href="#pharmacy">Pharmacists</a>
+            <span aria-hidden="true">/</span>
+            <a href="#courier">Couriers</a>
+            <span aria-hidden="true">/</span>
+            <a href="#agent">Agent</a>
           </nav>
         </section>
         <CareStory />
@@ -318,6 +349,7 @@ export default function DownloadPage() {
         </section>
         <PatientSpotlight />
         <ClinicalSpotlight />
+        <AgentSpotlight />
         <CareJourney />
         <GetStarted paused={motionPaused} />
         <LandingFAQ

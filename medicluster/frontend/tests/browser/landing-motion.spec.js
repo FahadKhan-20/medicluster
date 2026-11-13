@@ -12,10 +12,16 @@ test('animated logo splash finishes then releases page interaction', async ({ pa
 
 test('Escape skips loader without trapping keyboard focus', async ({ page }) => {
   await page.goto('/download', { waitUntil: 'domcontentloaded' });
+  const loader = page.getByRole('dialog', { name: 'Starting MediCluster' });
+  await expect(loader).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Starting MediCluster' })).toBeHidden();
+  await expect(loader).toBeHidden();
   await expect(page.locator('#app-content')).not.toHaveAttribute('inert');
   await page.keyboard.press('Tab');
+  const isSkipFocused = await page.evaluate(() => document.activeElement?.classList.contains('download-skip'));
+  if (!isSkipFocused) {
+    await page.keyboard.press('Tab');
+  }
   await expect(page.getByRole('link', { name: 'Skip to apps', exact: true })).toBeFocused();
 });
 

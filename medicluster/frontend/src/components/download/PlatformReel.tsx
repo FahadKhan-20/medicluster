@@ -45,7 +45,7 @@ export default function PlatformReel({ paused = false }: { paused?: boolean }) {
     <div className="mc-container mc-platform-layout">
       <div className="mc-platform-heading" data-reveal data-depth="4"><p className="mc-section-label">A more connected way to care</p><h2 id="care-story-title">Different roles.<br />One shared <em>direction.</em></h2></div>
       <div className="mc-platform-intro" data-reveal data-depth="4">
-        <p>We connect clinicians, patients, dispatchers and ambulance crews. From everyday health to the next emergency call, give every part of care a clear place to begin.</p>
+        <p>We connect clinicians, patients, dispatchers, ambulance crews, pharmacists and couriers. From everyday health and medication delivery to acute emergency response, give every part of care a clear place to begin.</p>
         <a className="download-pill" href="#workspace-showcase-title">Explore the workspaces<ArrowUpRight size={18} aria-hidden="true" /></a>
       </div>
       <div className="mc-platform-film" role="group" aria-label="MediCluster platform preview" ref={stage} data-playing={playing}>

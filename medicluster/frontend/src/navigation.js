@@ -29,6 +29,8 @@ export const NAV_GROUPS = [
   { label: "Operations", items: [
     { to: "/hospitals", label: "Hospitals" },
     { href: DISPATCH_URL, label: "Dispatch" },
+    { to: "/pharmacy", label: "Pharmacy" },
+    { to: "/courier", label: "Courier" },
   ] },
 ];
 

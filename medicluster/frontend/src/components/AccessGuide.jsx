@@ -6,6 +6,8 @@ const ACCESS = [
   { id: "patient",    who: "Patients",                  what: "Your medicines, reminders, readings and CliniQ",    how: "Mobile number + 6-digit text code",   where: "MediCluster mobile app",  href: "/app" },
   { id: "dispatcher", who: "Dispatchers",               what: "Live incidents, ambulances, hospitals and radio",   how: "Dispatch account email + password",   where: "Dispatch center",         href: `${DISPATCH_URL}/#/login` },
   { id: "crew",       who: "Ambulance crews",           what: "Duty status, incoming calls, missions and radio",   how: "Employee ID + 4-digit PIN",           where: "Crew app",                href: `${DISPATCH_URL}/#/driver/login` },
+  { id: "pharmacy",   who: "Pharmacists",               what: "Order queue, prescription verification, stock",     how: "Pharmacy email + password",           where: "Pharmacy portal",         href: "/pharmacy" },
+  { id: "courier",    who: "Couriers",                  what: "Assigned deliveries, live GPS, handover OTP",       how: "Courier phone + 4-digit PIN",         where: "Courier view",            href: "/courier" },
 ];
 
 /** Compact list of every role, its sign-in method and a link to the right screen. `current` is highlighted. */
